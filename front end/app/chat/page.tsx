@@ -60,6 +60,7 @@ export default function ChatWorkspace() {
   const [active, setActive] = useState<Detail | null>(null);
   const [prompt, setPrompt] = useState("");
   const [attachedImages, setAttachedImages] = useState<{ name: string; data: string }[]>([]);
+  const [draggingImages, setDraggingImages] = useState(false);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memoryDraft, setMemoryDraft] = useState("");
@@ -240,6 +241,13 @@ export default function ChatWorkspace() {
     } catch (error) { setNotice((error as Error).message); }
   }
 
+  async function addScreenshots(files: File[]) {
+    for (const file of files) {
+      if (attachedImages.length >= 4) break;
+      await addScreenshot(file);
+    }
+  }
+
   async function deleteDocument(id: string) {
     try { await api(`/knowledge/documents/${id}`, { method: "DELETE" }); await loadDocuments(); }
     catch (error) { setNotice((error as Error).message); }
@@ -327,7 +335,7 @@ export default function ChatWorkspace() {
   const selectedModel = active?.model || model;
 
   return (
-    <main className="flex h-dvh overflow-hidden bg-[#212121] text-[#ececec]">
+    <main className="flex h-dvh overflow-hidden bg-[#212121] text-[#ececec]" onDragOver={(event) => { if (Array.from(event.dataTransfer.types).includes("Files")) { event.preventDefault(); setDraggingImages(true); } }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingImages(false); }} onDrop={(event) => { event.preventDefault(); setDraggingImages(false); void addScreenshots(Array.from(event.dataTransfer.files)); }}>
       <aside className={`${sidebarOpen ? "w-[280px]" : "w-0"} relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#171717] transition-all duration-200`}>
         <div className="flex h-full w-[280px] flex-col p-2.5">
           <div className="flex items-center justify-between px-2 py-2">
@@ -407,6 +415,7 @@ export default function ChatWorkspace() {
 
       {notice && <div role="status" className={`fixed right-5 top-5 z-30 flex max-w-sm items-start gap-3 rounded-xl border px-4 py-3 shadow-2xl ${/failed|could not|error|no chat model/i.test(notice) ? "border-rose-400/30 bg-rose-950/95 text-rose-100" : "border-emerald-400/30 bg-emerald-950/95 text-emerald-100"}`}><span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/15 text-xs">{/failed|could not|error|no chat model/i.test(notice) ? "!" : "✓"}</span><p className="flex-1 text-sm leading-5">{notice}</p><button type="button" onClick={() => setNotice("")} aria-label="Dismiss notification" className="text-lg leading-4 opacity-70 hover:opacity-100">×</button></div>}
 
+      {draggingImages && <div className="pointer-events-none fixed inset-3 z-50 grid place-items-center rounded-[32px] border-2 border-dashed border-sky-300 bg-sky-400/10 backdrop-blur-sm"><div className="rounded-3xl border border-white/20 bg-[#1d2538]/95 px-10 py-8 text-center shadow-2xl"><div className="text-3xl">▧</div><h2 className="mt-3 text-xl font-semibold">Drop screenshots to analyze</h2><p className="mt-2 text-sm text-slate-300">Up to four images · 5 MB each · use a vision model</p></div></div>}
       {deleteTarget && <div role="dialog" aria-modal="true" aria-labelledby="delete-chat-title" className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4"><div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#2a2a2a] p-5 shadow-2xl"><div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-rose-500/15 text-rose-300">!</span><div><h2 id="delete-chat-title" className="font-semibold">Delete conversation?</h2><p className="mt-1 text-sm text-slate-400">“{deleteTarget.title}” and its messages will be permanently removed.</p></div></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-lg px-4 py-2 text-sm hover:bg-white/10">Cancel</button><button type="button" onClick={() => void confirmDeleteConversation()} className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400">Delete</button></div></div></div>}
 
       {documentsOpen && <aside className="absolute inset-y-0 right-0 z-20 w-full max-w-sm border-l border-white/10 bg-[#171717] p-5 shadow-2xl"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Knowledge base</h2><p className="text-xs text-slate-400">Private RAG documents</p></div><button onClick={() => setDocumentsOpen(false)} className="rounded-lg p-2 hover:bg-white/10">✕</button></div><button type="button" onClick={() => fileInput.current?.click()} className="mt-5 w-full rounded-xl border border-dashed border-white/20 px-4 py-5 text-sm text-slate-300 hover:bg-white/5">＋ Upload a TXT, MD, or PDF</button><p className="mt-2 text-xs text-slate-500">Documents are indexed privately and supplied only when relevant.</p><div className="mt-6 space-y-2">{documents.map((document) => <div key={document.id} className="flex items-center gap-3 rounded-xl bg-[#2f2f2f] p-3"><span className="min-w-0 flex-1 truncate text-sm">{document.filename}<small className="ml-2 text-slate-400">{document.chunk_count} chunks</small></span><button onClick={() => deleteDocument(document.id)} className="text-xs text-rose-300 hover:text-rose-200">Delete</button></div>)}{!documents.length && <p className="text-sm text-slate-400">No documents yet.</p>}</div></aside>}
