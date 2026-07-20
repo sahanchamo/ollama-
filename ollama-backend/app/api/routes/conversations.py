@@ -32,6 +32,8 @@ from app.services.ollama import GenerationBusyError
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_IMAGES_BYTES = 8 * 1024 * 1024
+MAX_MODEL_HISTORY_MESSAGES = 14
+MAX_MODEL_HISTORY_CHARS = 14_000
 
 
 def chat_title(content: str) -> str:
@@ -85,6 +87,18 @@ async def assert_model_available(db: DbSession, model: str, is_admin: bool) -> N
     access = await db.get(ModelAccess, model)
     if access is not None and not access.enabled and not is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This model is disabled by the administrator")
+
+
+def recent_model_messages(previous: list[Message]) -> list[ChatMessage]:
+    """Keep stored history intact but bound prompt work for a shared CPU model."""
+    selected: list[Message] = []
+    chars = 0
+    for message in reversed(previous):
+        if selected and (len(selected) >= MAX_MODEL_HISTORY_MESSAGES or chars + len(message.content) > MAX_MODEL_HISTORY_CHARS):
+            break
+        selected.append(message)
+        chars += len(message.content)
+    return [ChatMessage(role=message.role, content=message.content) for message in reversed(selected)]
 
 
 @router.get("", response_model=list[ConversationSummary])
@@ -245,7 +259,7 @@ async def send_message(
     previous = await db.scalars(
         select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at)
     )
-    messages = [ChatMessage(role=message.role, content=message.content) for message in previous]
+    messages = recent_model_messages(list(previous))
     if images:
         messages[-1].images = images
     try:
