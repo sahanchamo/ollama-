@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.models import User
 from app.db.models import UserRole
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import ApiKeyVerificationResponse, LoginRequest, RegisterRequest, TokenResponse, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -38,3 +38,18 @@ async def me(user: CurrentUser, db: DbSession) -> UserResponse:
     if user.is_admin:
         roles.add("admin")
     return UserResponse.model_validate(user).model_copy(update={"roles": sorted(roles) or ["user"]})
+
+
+@router.get("/verify-api-key", response_model=ApiKeyVerificationResponse)
+async def verify_api_key(request: Request, user: CurrentUser, db: DbSession) -> ApiKeyVerificationResponse:
+    """Verify an X-API-Key and return the user that owns it."""
+    api_key_id = getattr(request.state, "api_key_id", None)
+    if api_key_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Provide an X-API-Key header")
+    roles = set(await db.scalars(select(UserRole.role).where(UserRole.user_id == user.id)))
+    if user.is_admin:
+        roles.add("admin")
+    return ApiKeyVerificationResponse(
+        api_key_id=api_key_id,
+        user=UserResponse.model_validate(user).model_copy(update={"roles": sorted(roles) or ["user"]}),
+    )

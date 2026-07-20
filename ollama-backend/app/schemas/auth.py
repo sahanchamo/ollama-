@@ -26,3 +26,9 @@ class UserResponse(BaseModel):
     roles: list[str] = []
 
     model_config = {"from_attributes": True}
+
+
+class ApiKeyVerificationResponse(BaseModel):
+    valid: bool = True
+    api_key_id: UUID
+    user: UserResponse
