@@ -300,15 +300,15 @@ export default function ChatWorkspace() {
   const selectedModel = active?.model || model;
 
   return (
-    <main className="flex h-screen overflow-hidden bg-[#212121] text-[#ececec]">
-      <aside className={`${sidebarOpen ? "w-[260px]" : "w-0"} relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#171717] transition-all duration-200`}>
-        <div className="flex h-full w-[260px] flex-col p-2">
+    <main className="flex h-dvh overflow-hidden bg-[#212121] text-[#ececec]">
+      <aside className={`${sidebarOpen ? "w-[280px]" : "w-0"} relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#171717] transition-all duration-200`}>
+        <div className="flex h-full w-[280px] flex-col p-2.5">
           <div className="flex items-center justify-between px-2 py-2">
             <span className="grid h-7 w-7 place-items-center rounded-full border border-white/30 text-sm">◉</span>
             <div className="flex gap-2 text-slate-300"><span>⌕</span><span>▯</span></div>
           </div>
           <button onClick={createConversation} className="mt-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-[#2a2a2a]"><span className="text-lg">✎</span> New chat</button>
-          <div className="mt-5 px-2 text-xs font-semibold text-slate-300">Recents</div>
+          <div className="mt-6 px-2 text-xs font-medium text-slate-400">Chats</div>
           <div className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             {conversations.map((conversation) => (
               <div key={conversation.id} className={`group flex items-center rounded-lg ${active?.id === conversation.id ? "bg-[#2f2f2f]" : "hover:bg-[#2a2a2a]"}`}>
@@ -316,7 +316,7 @@ export default function ChatWorkspace() {
                 <button onClick={() => deleteConversationById(conversation)} aria-label={`Delete ${conversation.title}`} className="mr-1 rounded-md px-2 py-1 text-xs text-slate-400 opacity-0 hover:bg-white/10 hover:text-rose-300 group-hover:opacity-100 focus:opacity-100">✕</button>
               </div>
             ))}
-            {!conversations.length && <p className="px-3 py-3 text-xs text-slate-500">Your chats will appear here.</p>}
+            {!conversations.length && <p className="px-3 py-3 text-xs leading-5 text-slate-500">Your chat history will appear here.</p>}
           </div>
           <div className="border-t border-white/10 pt-2">
             <button onClick={() => setDocumentsOpen(true)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">▣ Knowledge base <span className="ml-auto text-xs text-slate-400">{documents.length}</span></button>
@@ -340,18 +340,20 @@ export default function ChatWorkspace() {
           <div className="mx-auto max-w-3xl px-5 pb-44 pt-8 sm:pt-12">
             {active?.messages.length ? active.messages.filter((message) => message.role !== "system").map((message) => (
               <article key={message.id} className={`group mb-8 flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={message.role === "user" ? "max-w-[82%] rounded-3xl bg-[#303030] px-5 py-3 leading-7" : "w-full px-1 py-1"}>
+                <div className={message.role === "user" ? "max-w-[82%] rounded-[24px] bg-[#303030] px-5 py-3 leading-7 shadow-sm" : "w-full px-1 py-1"}>
                   {message.content ? <MessageContent content={message.content} /> : message.status === "streaming" ? <span className="animate-pulse text-slate-400">Thinking…</span> : null}
                   {message.role === "assistant" && message.content && <div className="mt-3 flex gap-3 text-sm text-slate-500 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" onClick={() => navigator.clipboard.writeText(message.content)} className="hover:text-white">▣ Copy</button><button type="button" onClick={() => speak(message)} className="hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button><span>⌘</span><span>↻</span></div>}
                 </div>
               </article>
             )) : (
-              <div className="pt-28 text-center">
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">How can I help you today?</h1>
-                <p className="mx-auto mt-3 max-w-lg text-sm text-slate-400">Chat with your private Ollama model or add documents to use your knowledge base.</p>
-                <div className="mx-auto mt-8 flex max-w-xl flex-wrap justify-center gap-2">
-                  <button onClick={() => setPrompt("Summarize my uploaded documents")} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300 hover:bg-white/5">Summarize my documents</button>
-                  <button onClick={() => setPrompt("What can you help me with?")} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300 hover:bg-white/5">What can you do?</button>
+              <div className="pt-24 text-center sm:pt-32">
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-xl font-black text-[#212121] shadow-xl shadow-black/20">O</div>
+                <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-[2.5rem]">How can I help you today?</h1>
+                <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-400">Ask questions, work with your private documents, or explore ideas with your local model.</p>
+                <div className="mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-2">
+                  <button onClick={() => setPrompt("Summarize my uploaded documents")} className="rounded-xl border border-white/10 bg-[#2a2a2a] px-4 py-3 text-sm text-slate-200 transition hover:bg-[#333333]">Summarize my documents</button>
+                  <button onClick={() => setPrompt("Help me plan a project")} className="rounded-xl border border-white/10 bg-[#2a2a2a] px-4 py-3 text-sm text-slate-200 transition hover:bg-[#333333]">Help me plan a project</button>
+                  <button onClick={() => setPrompt("Explain this clearly with examples")} className="rounded-xl border border-white/10 bg-[#2a2a2a] px-4 py-3 text-sm text-slate-200 transition hover:bg-[#333333]">Explain a topic</button>
                 </div>
               </div>
             )}
@@ -361,7 +363,7 @@ export default function ChatWorkspace() {
         <form onSubmit={send} className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent px-4 pb-5 pt-14">
           <div className="mx-auto max-w-3xl">
             <input ref={fileInput} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadDocument(file); event.currentTarget.value = ""; }} />
-            <div className="rounded-[26px] border border-white/10 bg-[#303030] p-3 shadow-2xl shadow-black/30 focus-within:border-white/20">
+            <div className="rounded-[28px] border border-white/10 bg-[#303030] p-3 shadow-2xl shadow-black/30 transition focus-within:border-white/20 focus-within:bg-[#353535]">
               <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} disabled={busy} rows={1} placeholder="Ask anything" className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-slate-400" />
               <div className="flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10">＋ Add document</button><button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || !prompt.trim()} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
             </div>
