@@ -18,6 +18,8 @@ class OllamaService:
             base_url=settings.ollama_base_url.rstrip("/"),
             timeout=httpx.Timeout(settings.ollama_timeout_seconds, connect=10),
         )
+        self.generation_slots = asyncio.Semaphore(settings.max_concurrent_generations)
+        self.queue_seconds = settings.generation_queue_seconds
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -40,8 +42,6 @@ class OllamaService:
             "/api/embed",
             json={"model": settings.rag_embedding_model, "input": inputs, "truncate": True},
         )
-        self.generation_slots = asyncio.Semaphore(settings.max_concurrent_generations)
-        self.queue_seconds = settings.generation_queue_seconds
         if response.status_code == 404:
             error = response.json().get("error", "")
             # Modern Ollama also uses 404 when the selected model is absent. Preserve that
