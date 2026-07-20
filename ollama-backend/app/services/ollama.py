@@ -36,6 +36,14 @@ class OllamaService:
             json={"model": settings.rag_embedding_model, "input": inputs, "truncate": True},
         )
         if response.status_code == 404:
+            error = response.json().get("error", "")
+            # Modern Ollama also uses 404 when the selected model is absent. Preserve that
+            # useful diagnosis instead of hiding it behind an obsolete endpoint error.
+            if "model" in error.lower() or "not found" in error.lower():
+                raise RuntimeError(
+                    f"Embedding model '{settings.rag_embedding_model}' is not installed. "
+                    f"Run: docker compose exec ollama ollama pull {settings.rag_embedding_model}"
+                )
             # Ollama versions before the batch /api/embed endpoint expose the legacy single-prompt endpoint.
             embeddings = []
             for text in inputs:

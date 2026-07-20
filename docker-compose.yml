@@ -37,6 +37,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      ollama-embeddings:
+        condition: service_completed_successfully
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -70,6 +72,18 @@ services:
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
+
+  # Downloads the document-search model once into the persistent Ollama volume.
+  ollama-embeddings:
+    image: ollama/ollama:latest
+    restart: on-failure
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/ollama"]
+    command: ["pull", "nomic-embed-text"]
+    depends_on:
+      ollama:
+        condition: service_started
 
 volumes:
   postgres_data:
