@@ -14,3 +14,18 @@ button, input, textarea, select { font: inherit; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 button { -webkit-tap-highlight-color: transparent; }
 textarea { field-sizing: content; }
+
+.login-scene { isolation: isolate; }
+.login-aurora { position: fixed; width: 44rem; height: 44rem; border-radius: 9999px; filter: blur(55px); opacity: .30; pointer-events: none; z-index: -1; animation: drift 11s ease-in-out infinite alternate; }
+.login-aurora-a { background: #2776e8; top: -20rem; right: -10rem; }
+.login-aurora-b { background: #7c3aed; bottom: -25rem; left: -12rem; animation-delay: -5s; }
+.login-dots, .guest-grid { position: fixed; inset: 0; pointer-events: none; background-image: radial-gradient(rgba(174, 211, 255, .20) 1px, transparent 1px); background-size: 28px 28px; mask-image: radial-gradient(ellipse at center, black, transparent 75%); opacity: .25; }
+.login-perspective { perspective: 1100px; }
+.login-card { transform: rotateY(-4deg) rotateX(2deg); animation: cardFloat 6s ease-in-out infinite; }
+.login-card-glow { position: absolute; inset: -30%; background: linear-gradient(125deg, transparent 35%, rgba(125, 211, 252, .16) 48%, transparent 60%); transform: rotate(10deg); animation: sheen 7s linear infinite; }
+.guest-orb { position: fixed; z-index: -1; width: 34rem; height: 34rem; border-radius: 9999px; filter: blur(75px); opacity: .24; pointer-events: none; }
+.guest-orb-one { background: #2563eb; top: -17rem; right: -12rem; }.guest-orb-two { background: #7c3aed; bottom: -18rem; left: -13rem; }
+@keyframes drift { to { transform: translate3d(-35px, 50px, 0) scale(1.1); } }
+@keyframes cardFloat { 50% { transform: rotateY(-1deg) rotateX(-1deg) translateY(-9px); } }
+@keyframes sheen { from { transform: translateX(-40%) rotate(10deg); } to { transform: translateX(40%) rotate(10deg); } }
+@media (max-width: 1023px) { .login-card { transform: none; animation: none; } }

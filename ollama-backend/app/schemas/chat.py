@@ -24,6 +24,12 @@ class ChatRequest(BaseModel):
         return messages
 
 
+class GuestChatRequest(ChatRequest):
+    """An intentionally short-lived, unauthenticated chat request."""
+
+    session_id: str = Field(min_length=24, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
 class ConversationCreate(BaseModel):
     model: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9._:-]+$")
     title: str | None = Field(default=None, max_length=200)

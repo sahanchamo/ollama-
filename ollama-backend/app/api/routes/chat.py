@@ -7,13 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
 from app.db.models import ChatAudit, UsageEvent
-from app.schemas.chat import ChatMessage, ChatRequest
+from app.schemas.chat import ChatMessage, ChatRequest, GuestChatRequest
 from app.services.rate_limit import limit_request
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = structlog.get_logger()
+GUEST_MESSAGE_LIMIT = 10
 
 
 def prompt_size(payload: ChatRequest) -> int:
@@ -37,6 +38,38 @@ async def record_usage(db: AsyncSession, user_id: object, payload: ChatRequest, 
         )
     )
     await db.commit()
+
+
+@router.post("/guest")
+async def guest_chat(payload: GuestChatRequest, request: Request):
+    """Stream a disposable preview chat, capped on the server at ten messages."""
+    if prompt_size(payload) > min(get_settings().max_prompt_chars, 6000):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Prompt exceeds the guest limit")
+
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_ip = (forwarded_for.split(",")[0].strip() if forwarded_for else None) or (request.client.host if request.client else "unknown")
+    key = f"guest-chat:{client_ip}:{payload.session_id}"
+    count = await request.app.state.redis.incr(key)
+    if count == 1:
+        await request.app.state.redis.expire(key, 60 * 60 * 24)
+    if count > GUEST_MESSAGE_LIMIT:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Your 10 free messages are used. Create an account to continue.",
+            headers={"X-Guest-Messages-Remaining": "0"},
+        )
+    try:
+        return StreamingResponse(
+            request.app.state.ollama.stream_chat(payload),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "X-Guest-Messages-Remaining": str(GUEST_MESSAGE_LIMIT - count),
+            },
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc
 
 
 @router.get("/models")

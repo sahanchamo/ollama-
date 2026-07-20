@@ -285,7 +285,7 @@ export default function ChatWorkspace() {
   useEffect(() => {
     const saved = sessionStorage.getItem("ollama_gateway_token");
     const stored = sessionStorage.getItem("ollama_gateway_user");
-    if (!saved || !stored) { router.replace("/login"); return; }
+    if (!saved || !stored) { router.replace("/guest"); return; }
     try { setToken(saved); setUser(JSON.parse(stored)); }
     catch { logout(); }
   }, [router]);
