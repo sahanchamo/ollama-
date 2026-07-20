@@ -32,6 +32,11 @@ declare global {
 
 const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "/api/gateway").replace(/\/$/, "");
 
+function createRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 function MessageContent({ content }: { content: string }) {
   const blocks = content.split(/```/);
   return (
@@ -236,7 +241,7 @@ export default function ChatWorkspace() {
       setPrompt("");
       setBusy(true);
       setNotice("");
-      const requestId = crypto.randomUUID();
+      const requestId = createRequestId();
       const userMessageId = `local-user-${requestId}`;
       const assistantMessageId = `streaming-${requestId}`;
       const temporary: Message = { id: assistantMessageId, role: "assistant", content: "", status: "streaming", created_at: new Date().toISOString() };
