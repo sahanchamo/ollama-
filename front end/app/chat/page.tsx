@@ -8,7 +8,7 @@ import ReactMarkdown from "react-markdown";
 type User = { email: string; is_admin: boolean };
 type Model = { name: string };
 type Conversation = { id: string; title: string; model: string; updated_at: string };
-type Message = { id: string; role: "user" | "assistant" | "system"; content: string; status: string; created_at: string };
+type Message = { id: string; role: "user" | "assistant" | "system"; content: string; status: string; created_at: string; images?: string[] };
 type Detail = Conversation & { messages: Message[] };
 type Document = { id: string; filename: string; chunk_count: number };
 type Memory = { id: string; content: string; created_at: string };
@@ -50,6 +50,7 @@ function MessageContent({ content }: { content: string }) {
 export default function ChatWorkspace() {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
+  const imageInput = useRef<HTMLInputElement>(null);
   const recognition = useRef<BrowserSpeechRecognition | null>(null);
   const [token, setToken] = useState("");
   const [user, setUser] = useState<User | null>(null);
@@ -58,6 +59,7 @@ export default function ChatWorkspace() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [active, setActive] = useState<Detail | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [attachedImages, setAttachedImages] = useState<{ name: string; data: string }[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memoryDraft, setMemoryDraft] = useState("");
@@ -226,6 +228,18 @@ export default function ChatWorkspace() {
     finally { setBusy(false); }
   }
 
+  async function addScreenshot(file: File) {
+    if (!file.type.startsWith("image/")) { setNotice("Choose a PNG, JPG, WEBP, or other image file."); return; }
+    if (file.size > 5 * 1024 * 1024) { setNotice("Each screenshot must be 5 MB or smaller."); return; }
+    if (attachedImages.length >= 4) { setNotice("You can attach up to four screenshots per message."); return; }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Could not read image")); reader.readAsDataURL(file); });
+      const data = dataUrl.split(",")[1];
+      if (!data) throw new Error("Could not read image");
+      setAttachedImages((current) => [...current, { name: file.name, data }]);
+    } catch (error) { setNotice((error as Error).message); }
+  }
+
   async function deleteDocument(id: string) {
     try { await api(`/knowledge/documents/${id}`, { method: "DELETE" }); await loadDocuments(); }
     catch (error) { setNotice((error as Error).message); }
@@ -233,7 +247,7 @@ export default function ChatWorkspace() {
 
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (!prompt.trim() || busy) return;
+    if ((!prompt.trim() && !attachedImages.length) || busy) return;
     let chat = active;
     try {
       if (!chat) {
@@ -243,17 +257,19 @@ export default function ChatWorkspace() {
         await loadConversations();
       }
       if (!chat) return;
-      const content = prompt.trim();
+      const content = prompt.trim() || "Please analyze these screenshots.";
+      const images = attachedImages.map((image) => image.data);
       setPrompt("");
+      setAttachedImages([]);
       setBusy(true);
       setNotice("");
       const requestId = createRequestId();
       const userMessageId = `local-user-${requestId}`;
       const assistantMessageId = `streaming-${requestId}`;
       const temporary: Message = { id: assistantMessageId, role: "assistant", content: "", status: "streaming", created_at: new Date().toISOString() };
-      setActive((current) => current ? { ...current, messages: [...current.messages, { id: userMessageId, role: "user", content, status: "complete", created_at: new Date().toISOString() }, temporary] } : current);
+      setActive((current) => current ? { ...current, messages: [...current.messages, { id: userMessageId, role: "user", content, images, status: "complete", created_at: new Date().toISOString() }, temporary] } : current);
 
-      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content }) });
+      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images }) });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.detail || "Message failed");
@@ -354,6 +370,7 @@ export default function ChatWorkspace() {
             {active?.messages.length ? active.messages.filter((message) => message.role !== "system").map((message) => (
               <article key={message.id} className={`group mb-8 flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={message.role === "user" ? "max-w-[82%] rounded-[24px] bg-[#303030] px-5 py-3 leading-7 shadow-sm" : "w-full px-1 py-1"}>
+                  {message.images?.length ? <div className="mb-3 flex flex-wrap gap-2">{message.images.map((image, index) => <img key={`${message.id}-${index}`} src={`data:image/*;base64,${image}`} alt={`Attached screenshot ${index + 1}`} className="max-h-56 max-w-full rounded-xl border border-white/10 object-contain" />)}</div> : null}
                   {message.content ? <MessageContent content={message.content} /> : message.status === "streaming" ? <span className="animate-pulse text-slate-400">Thinking…</span> : null}
                   {message.role === "assistant" && message.content && <div className="mt-3 flex gap-3 text-sm text-slate-500 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" onClick={() => navigator.clipboard.writeText(message.content)} className="hover:text-white">▣ Copy</button><button type="button" onClick={() => speak(message)} className="hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button><span>⌘</span><span>↻</span></div>}
                 </div>
@@ -377,9 +394,11 @@ export default function ChatWorkspace() {
         <form onSubmit={send} className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent px-4 pb-5 pt-14">
           <div className="mx-auto max-w-3xl">
             <input ref={fileInput} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadDocument(file); event.currentTarget.value = ""; }} />
+            <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void addScreenshot(file); event.currentTarget.value = ""; }} />
             <div className="rounded-[28px] border border-white/10 bg-[#303030] p-3 shadow-2xl shadow-black/30 transition focus-within:border-white/20 focus-within:bg-[#353535]">
+              {attachedImages.length > 0 && <div className="mb-2 flex flex-wrap gap-2 px-2">{attachedImages.map((image, index) => <div key={`${image.name}-${index}`} className="group relative"><img src={`data:image/*;base64,${image.data}`} alt={image.name} className="h-16 w-20 rounded-lg border border-white/10 object-cover" /><button type="button" onClick={() => setAttachedImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${image.name}`} className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-black text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div>}
               <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} disabled={busy} rows={1} placeholder="Ask anything" className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-slate-400" />
-              <div className="flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10">＋ Add document</button><button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || !prompt.trim()} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
+              <div className="flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => imageInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-sky-200 hover:bg-white/10">▧ Add screenshot</button><button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10">＋ Add document</button><button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || (!prompt.trim() && !attachedImages.length)} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
             </div>
             <p className="mt-2 text-center text-xs text-slate-500">Ollama can make mistakes. Check important information.</p>
           </div>

@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: str = Field(min_length=1)
+    # Base64 image data supported by Ollama vision models. Images are request-scoped.
+    images: list[str] | None = Field(default=None, max_length=4)
 
 
 class ChatRequest(BaseModel):
@@ -45,6 +47,7 @@ class ConversationUpdate(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1)
+    images: list[str] = Field(default_factory=list, max_length=4)
     temperature: float | None = Field(default=None, ge=0, le=2)
 
 

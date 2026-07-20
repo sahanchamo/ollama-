@@ -1,4 +1,6 @@
 import json
+import base64
+import binascii
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -27,12 +29,29 @@ from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGES_BYTES = 8 * 1024 * 1024
 
 
 def chat_title(content: str) -> str:
     """Fast, predictable first title; clients can rename it later."""
     compact = " ".join(content.split())
     return f"{compact[:57].rstrip()}..." if len(compact) > 60 else compact
+
+
+def validate_images(images: list[str]) -> list[str]:
+    total = 0
+    for image in images:
+        try:
+            decoded = base64.b64decode(image, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "An attached image is not valid base64") from exc
+        if not decoded or len(decoded) > MAX_IMAGE_BYTES:
+            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Each screenshot must be 5 MB or smaller")
+        total += len(decoded)
+    if total > MAX_IMAGES_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Attached screenshots must total 8 MB or smaller")
+    return images
 
 
 async def memory_instruction(db: DbSession, user_id: UUID) -> str | None:
@@ -197,6 +216,12 @@ async def send_message(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Message exceeds configured limit")
     await enforce_quota(db, user.id)
     conversation = await owned_conversation(db, conversation_id, user.id)
+    images = validate_images(payload.images)
+    if images and "vl" not in conversation.model.lower():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Screenshots require a vision model. Select qwen3-vl:2b or qwen3-vl:4b, then retry.",
+        )
     user_message = Message(conversation_id=conversation.id, role="user", content=payload.content)
     db.add(user_message)
     if conversation.title == "New chat":
@@ -209,6 +234,8 @@ async def send_message(
         select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at)
     )
     messages = [ChatMessage(role=message.role, content=message.content) for message in previous]
+    if images:
+        messages[-1].images = images
     try:
         context = await retrieve_context(db, request.app.state.ollama, user.id, payload.content)
     except (httpx.HTTPError, RuntimeError) as exc:
