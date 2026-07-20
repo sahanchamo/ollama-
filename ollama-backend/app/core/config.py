@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = Field(default=200, ge=0, le=1000)
     rag_max_upload_bytes: int = Field(default=10_485_760, ge=1024, le=104_857_600)
     bootstrap_admin_email: str | None = None
+    bootstrap_admin_password: str | None = Field(default=None, min_length=12)
 
 
 @lru_cache

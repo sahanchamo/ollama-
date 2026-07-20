@@ -7,13 +7,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
-from sqlalchemy import text, update
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import admin, auth, chat, conversations, health, knowledge, tools, usage
 from app.core.config import get_settings
 from app.core.logging import configure_logging
-from app.db.models import Base, User
+from app.core.security import hash_password
+from app.db.models import Base, User, UserRole
 from app.db.session import SessionLocal, engine
 from app.services.ollama import OllamaService
 from app.services.rate_limit import RateLimiter
@@ -33,20 +34,33 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as connection:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await connection.run_sync(Base.metadata.create_all)
-        if settings.bootstrap_admin_email:
-            await connection.execute(
-                update(User)
-                .where(User.email == settings.bootstrap_admin_email.lower())
-                .values(is_admin=True)
-            )
-            await connection.execute(
-                text(
-                    "INSERT INTO user_roles (user_id, role) "
-                    "SELECT id, 'admin' FROM users WHERE email = :email "
-                    "ON CONFLICT (user_id, role) DO NOTHING"
-                ),
-                {"email": settings.bootstrap_admin_email.lower()},
-            )
+    if settings.bootstrap_admin_email:
+        email = settings.bootstrap_admin_email.lower()
+        async with SessionLocal() as session:
+            user = await session.scalar(select(User).where(User.email == email))
+            if user is None and settings.bootstrap_admin_password:
+                user = User(
+                    email=email,
+                    password_hash=hash_password(settings.bootstrap_admin_password),
+                    is_active=True,
+                    is_admin=True,
+                )
+                session.add(user)
+                await session.flush()
+                log.info("bootstrap_admin_created", email=email)
+            elif user is not None:
+                user.is_admin = True
+                log.info("bootstrap_admin_promoted", email=email)
+            else:
+                log.warning("bootstrap_admin_not_created", reason="BOOTSTRAP_ADMIN_PASSWORD is not set")
+
+            if user is not None:
+                role = await session.scalar(
+                    select(UserRole).where(UserRole.user_id == user.id, UserRole.role == "admin")
+                )
+                if role is None:
+                    session.add(UserRole(user_id=user.id, role="admin"))
+                await session.commit()
     yield
     await app.state.ollama.close()
     await app.state.redis.aclose()

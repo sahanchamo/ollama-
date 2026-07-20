@@ -99,7 +99,7 @@ The Compose database image includes pgvector. Existing PostgreSQL data is retain
 
 ## Admin and API keys
 
-Set `BOOTSTRAP_ADMIN_EMAIL` in `.env` to an existing registered email, then restart the API. That user becomes an administrator. Administrators can inspect all user token/request totals via `GET /api/v1/admin/overview`, create API keys with `POST /api/v1/admin/api-keys`, and revoke keys with `DELETE /api/v1/admin/api-keys/{id}`.
+Set `BOOTSTRAP_ADMIN_EMAIL` in `.env` to an existing registered email, then restart the API. That user becomes an administrator. To create the first administrator automatically, set both `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (at least 12 characters) before the first startup. The password is hashed and only used when that email does not exist, so restarting the service will not overwrite an existing password. Administrators can inspect all user token/request totals via `GET /api/v1/admin/overview`, create API keys with `POST /api/v1/admin/api-keys`, and revoke keys with `DELETE /api/v1/admin/api-keys/{id}`.
 
 An API key is shown only once when created. API clients send it on each request:
 
