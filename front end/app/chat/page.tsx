@@ -360,8 +360,8 @@ export default function ChatWorkspace() {
               </article>
             )) : (
               <div className="pt-24 text-center sm:pt-32">
-                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-2xl shadow-xl shadow-black/20"><img src="/icon.svg" alt="Starlen" className="h-full w-full" /></div>
-                <p className="mt-4 text-xs font-semibold tracking-[.3em] text-sky-300">STARLEN</p>
+                <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-[22px] shadow-2xl shadow-violet-950/50"><img src="/icon.svg" alt="Starlen" className="h-full w-full" /></div>
+                <p className="mt-4 bg-gradient-to-r from-sky-300 via-indigo-300 to-violet-300 bg-clip-text text-xs font-bold tracking-[.34em] text-transparent">STARLEN</p>
                 <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-[2.5rem]">How can I help you today?</h1>
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-400">Ask questions, work with your private documents, or explore ideas with your local model.</p>
                 <div className="mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-2">
