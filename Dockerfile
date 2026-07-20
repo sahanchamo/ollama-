@@ -1,9 +1,9 @@
 FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /frontend
-COPY front end/package.json front end/package-lock.json ./
+COPY ["front end/package.json", "front end/package-lock.json", "./"]
 RUN npm ci
-COPY front end/ ./
+COPY ["front end/", "./"]
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
