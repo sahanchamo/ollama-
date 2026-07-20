@@ -39,7 +39,7 @@ export default function GuestChatPage() {
     setPrompt(""); setError(""); setBusy(true);
     setMessages((current) => [...current, { id: requestId, role: "user", content }, { id: `answer-${requestId}`, role: "assistant", content: "", pending: true }]);
     try {
-      const response = await fetch(`${base}/chat/guest`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "qwen2.5:3b", session_id: guestId(), messages: history, stream: true }) });
+      const response = await fetch(`${base}/chat/guest`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "qwen3:4b", session_id: guestId(), messages: history, stream: true }) });
       const left = response.headers.get("X-Guest-Messages-Remaining");
       if (left !== null) setRemaining(Number(left));
       if (!response.ok || !response.body) {

@@ -54,7 +54,7 @@ export default function ChatWorkspace() {
   const [token, setToken] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [models, setModels] = useState<Model[]>([]);
-  const [model, setModel] = useState("qwen2.5:3b");
+  const [model, setModel] = useState("qwen3:4b");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [active, setActive] = useState<Detail | null>(null);
   const [prompt, setPrompt] = useState("");
