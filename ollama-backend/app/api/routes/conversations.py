@@ -27,6 +27,7 @@ from app.services.rate_limit import limit_request
 from app.services.rag import build_rag_instruction, retrieve_context
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
+from app.services.ollama import GenerationBusyError
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -202,6 +203,8 @@ async def persist_stream(
                 except json.JSONDecodeError:
                     pass
             yield chunk
+    except GenerationBusyError as exc:
+        yield json.dumps({"error": str(exc), "done": True}).encode() + b"\n"
     except httpx.HTTPError:
         # The frontend receives a final stream event instead of an opaque proxy failure.
         yield b'{"error":"Model service unavailable","done":true}\n'

@@ -17,6 +17,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_TIMEOUT_SECONDS: "180"
+      MAX_CONCURRENT_GENERATIONS: "1"
+      GENERATION_QUEUE_SECONDS: "20"
       ALLOWED_ORIGINS: '["http://localhost:3000"]'
       RATE_LIMIT_PER_MINUTE: "30"
       MAX_PROMPT_CHARS: "20000"
@@ -70,6 +72,11 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    environment:
+      # CPU VPS: one model and one generation at a time avoids memory thrashing.
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "10m"
     volumes:
       - ollama_data:/root/.ollama
 

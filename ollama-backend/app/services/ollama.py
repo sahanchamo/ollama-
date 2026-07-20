@@ -1,9 +1,14 @@
+import asyncio
 from collections.abc import AsyncIterator
 
 import httpx
 
 from app.core.config import get_settings
 from app.schemas.chat import ChatRequest
+
+
+class GenerationBusyError(RuntimeError):
+    pass
 
 
 class OllamaService:
@@ -35,6 +40,8 @@ class OllamaService:
             "/api/embed",
             json={"model": settings.rag_embedding_model, "input": inputs, "truncate": True},
         )
+        self.generation_slots = asyncio.Semaphore(settings.max_concurrent_generations)
+        self.queue_seconds = settings.generation_queue_seconds
         if response.status_code == 404:
             error = response.json().get("error", "")
             # Modern Ollama also uses 404 when the selected model is absent. Preserve that
@@ -71,8 +78,15 @@ class OllamaService:
 
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[bytes]:
         payload = request.model_dump() | {"stream": True}
-        async with self.client.stream("POST", "/api/chat", json=payload) as response:
-            response.raise_for_status()
-            async for chunk in response.aiter_bytes():
-                if chunk:
-                    yield chunk
+        try:
+            await asyncio.wait_for(self.generation_slots.acquire(), timeout=self.queue_seconds)
+        except TimeoutError as exc:
+            raise GenerationBusyError("The AI server is busy. Please retry in a moment.") from exc
+        try:
+            async with self.client.stream("POST", "/api/chat", json=payload) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes():
+                    if chunk:
+                        yield chunk
+        finally:
+            self.generation_slots.release()
