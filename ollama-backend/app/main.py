@@ -34,6 +34,9 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as connection:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await connection.run_sync(Base.metadata.create_all)
+        # Ollama reports durations in nanoseconds, which exceed a 32-bit integer for normal requests.
+        await connection.execute(text("ALTER TABLE usage_events ALTER COLUMN total_duration_ns TYPE BIGINT"))
+        await connection.execute(text("ALTER TABLE usage_events ALTER COLUMN load_duration_ns TYPE BIGINT"))
     if settings.bootstrap_admin_email:
         email = settings.bootstrap_admin_email.lower()
         async with SessionLocal() as session:
