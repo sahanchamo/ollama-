@@ -9,7 +9,7 @@ from sqlalchemy import desc, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import Conversation, Message, UsageEvent
+from app.db.models import Conversation, Message, UsageEvent, UserMemory
 from app.db.session import SessionLocal
 from app.schemas.chat import (
     ChatMessage,
@@ -33,6 +33,23 @@ def chat_title(content: str) -> str:
     """Fast, predictable first title; clients can rename it later."""
     compact = " ".join(content.split())
     return f"{compact[:57].rstrip()}..." if len(compact) > 60 else compact
+
+
+async def memory_instruction(db: DbSession, user_id: UUID) -> str | None:
+    memories = await db.scalars(
+        select(UserMemory)
+        .where(UserMemory.user_id == user_id)
+        .order_by(UserMemory.created_at.desc())
+        .limit(30)
+    )
+    items = [memory.content.strip() for memory in memories if memory.content.strip()]
+    if not items:
+        return None
+    context = "\n".join(f"- {item}" for item in reversed(items))[:12_000]
+    return (
+        "LONG-TERM USER MEMORY (private user-provided preferences and facts):\n"
+        f"{context}\n\nUse this only when relevant. Do not claim to remember anything not listed here."
+    )
 
 
 async def owned_conversation(db: DbSession, conversation_id: UUID, user_id: UUID) -> Conversation:
@@ -190,8 +207,9 @@ async def send_message(
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Knowledge retrieval unavailable: {exc}") from exc
     rag_instruction = build_rag_instruction(context)
+    saved_memory = await memory_instruction(db, user.id)
     tool_instruction = await live_domain_context(payload.content)
-    system_context = "\n\n".join(item for item in (rag_instruction, tool_instruction) if item)
+    system_context = "\n\n".join(item for item in (saved_memory, rag_instruction, tool_instruction) if item)
     if system_context:
         messages.insert(0, ChatMessage(role="system", content=system_context))
     ollama_request = ChatRequest(

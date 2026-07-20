@@ -10,6 +10,7 @@ type Conversation = { id: string; title: string; model: string; updated_at: stri
 type Message = { id: string; role: "user" | "assistant" | "system"; content: string; status: string; created_at: string };
 type Detail = Conversation & { messages: Message[] };
 type Document = { id: string; filename: string; chunk_count: number };
+type Memory = { id: string; content: string; created_at: string };
 type BrowserSpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
@@ -71,7 +72,10 @@ export default function ChatWorkspace() {
   const [active, setActive] = useState<Detail | null>(null);
   const [prompt, setPrompt] = useState("");
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memoryDraft, setMemoryDraft] = useState("");
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -154,6 +158,21 @@ export default function ChatWorkspace() {
 
   async function loadConversations() { setConversations(await api("/conversations")); }
   async function loadDocuments() { setDocuments(await api("/knowledge/documents")); }
+  async function loadMemories() { setMemories(await api("/memory")); }
+  async function saveMemory() {
+    const content = memoryDraft.trim();
+    if (!content) return;
+    try {
+      await api("/memory", { method: "POST", body: JSON.stringify({ content }) });
+      setMemoryDraft("");
+      await loadMemories();
+      setNotice("Memory saved for future chats.");
+    } catch (error) { setNotice(`Could not save memory: ${(error as Error).message}`); }
+  }
+  async function deleteMemory(id: string) {
+    try { await api(`/memory/${id}`, { method: "DELETE" }); await loadMemories(); }
+    catch (error) { setNotice((error as Error).message); }
+  }
   async function openConversation(id: string) {
     try { setActive(await api(`/conversations/${id}`)); }
     catch (error) { setNotice((error as Error).message); }
@@ -286,7 +305,7 @@ export default function ChatWorkspace() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([loadModels(), loadConversations(), loadDocuments()]).catch((error) => setNotice((error as Error).message));
+    Promise.all([loadModels(), loadConversations(), loadDocuments(), loadMemories()]).catch((error) => setNotice((error as Error).message));
   }, [token]);
 
   useEffect(() => {
@@ -338,6 +357,7 @@ export default function ChatWorkspace() {
             <option value={selectedModel}>{selectedModel}</option>
             {models.filter((item) => item.name !== selectedModel).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
           </select>
+          <button onClick={() => setMemoriesOpen(true)} className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10">Memory</button>
           {active && <div className="ml-auto flex gap-1"><button onClick={renameConversation} className="rounded-lg px-3 py-1.5 text-sm hover:bg-white/10">Rename</button><button onClick={deleteConversation} className="rounded-lg px-3 py-1.5 text-sm text-rose-200 hover:bg-white/10">Delete</button></div>}
         </header>
 
@@ -382,6 +402,7 @@ export default function ChatWorkspace() {
       {deleteTarget && <div role="dialog" aria-modal="true" aria-labelledby="delete-chat-title" className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4"><div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#2a2a2a] p-5 shadow-2xl"><div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-rose-500/15 text-rose-300">!</span><div><h2 id="delete-chat-title" className="font-semibold">Delete conversation?</h2><p className="mt-1 text-sm text-slate-400">“{deleteTarget.title}” and its messages will be permanently removed.</p></div></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-lg px-4 py-2 text-sm hover:bg-white/10">Cancel</button><button type="button" onClick={() => void confirmDeleteConversation()} className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400">Delete</button></div></div></div>}
 
       {documentsOpen && <aside className="absolute inset-y-0 right-0 z-20 w-full max-w-sm border-l border-white/10 bg-[#171717] p-5 shadow-2xl"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Knowledge base</h2><p className="text-xs text-slate-400">Private RAG documents</p></div><button onClick={() => setDocumentsOpen(false)} className="rounded-lg p-2 hover:bg-white/10">✕</button></div><button type="button" onClick={() => fileInput.current?.click()} className="mt-5 w-full rounded-xl border border-dashed border-white/20 px-4 py-5 text-sm text-slate-300 hover:bg-white/5">＋ Upload a TXT, MD, or PDF</button><p className="mt-2 text-xs text-slate-500">Documents are indexed privately and supplied only when relevant.</p><div className="mt-6 space-y-2">{documents.map((document) => <div key={document.id} className="flex items-center gap-3 rounded-xl bg-[#2f2f2f] p-3"><span className="min-w-0 flex-1 truncate text-sm">{document.filename}<small className="ml-2 text-slate-400">{document.chunk_count} chunks</small></span><button onClick={() => deleteDocument(document.id)} className="text-xs text-rose-300 hover:text-rose-200">Delete</button></div>)}{!documents.length && <p className="text-sm text-slate-400">No documents yet.</p>}</div></aside>}
+      {memoriesOpen && <aside className="absolute inset-y-0 right-0 z-30 w-full max-w-sm border-l border-white/10 bg-[#171717] p-5 shadow-2xl"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Long-term memory</h2><p className="text-xs text-slate-400">Private facts and preferences used across chats</p></div><button onClick={() => setMemoriesOpen(false)} aria-label="Close memory" className="rounded-lg p-2 hover:bg-white/10">Close</button></div><textarea value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} maxLength={2000} rows={4} placeholder="Example: I prefer concise answers and work in Sri Lanka." className="mt-5 w-full resize-none rounded-xl border border-white/10 bg-[#2a2a2a] p-3 text-sm outline-none focus:border-white/30" /><button type="button" onClick={() => void saveMemory()} disabled={!memoryDraft.trim()} className="mt-2 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black disabled:bg-slate-600 disabled:text-slate-300">Save memory</button><p className="mt-3 text-xs leading-5 text-slate-500">Memories are used as private context in future chats. Delete any memory you no longer want used.</p><div className="mt-5 space-y-2 overflow-y-auto"><h3 className="text-xs font-medium uppercase tracking-wide text-slate-400">Saved memories</h3>{memories.map((memory) => <div key={memory.id} className="rounded-xl bg-[#2f2f2f] p-3"><p className="whitespace-pre-wrap text-sm leading-5">{memory.content}</p><button onClick={() => void deleteMemory(memory.id)} className="mt-2 text-xs text-rose-300 hover:text-rose-200">Delete</button></div>)}{!memories.length && <p className="text-sm text-slate-400">No saved memories yet.</p>}</div></aside>}
     </main>
   );
 }
