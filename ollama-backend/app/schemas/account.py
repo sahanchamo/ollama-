@@ -23,3 +23,7 @@ class PersonalApiKeyResponse(BaseModel):
 
 class PersonalApiKeyCreated(PersonalApiKeyResponse):
     api_key: str
+
+
+class LanguagePreference(BaseModel):
+    response_language: str | None = Field(default=None, max_length=64)

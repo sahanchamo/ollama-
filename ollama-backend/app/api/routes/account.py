@@ -7,9 +7,21 @@ from sqlalchemy import select, update
 from app.api.deps import CurrentUser, DbSession
 from app.core.security import create_api_key
 from app.db.models import ApiKey
-from app.schemas.account import PersonalApiKeyCreate, PersonalApiKeyCreated, PersonalApiKeyResponse
+from app.schemas.account import LanguagePreference, PersonalApiKeyCreate, PersonalApiKeyCreated, PersonalApiKeyResponse
 
 router = APIRouter(prefix="/account", tags=["account"])
+
+
+@router.get("/preferences", response_model=LanguagePreference)
+async def get_preferences(user: CurrentUser) -> LanguagePreference:
+    return LanguagePreference(response_language=user.response_language)
+
+
+@router.put("/preferences", response_model=LanguagePreference)
+async def update_preferences(payload: LanguagePreference, user: CurrentUser, db: DbSession) -> LanguagePreference:
+    user.response_language = payload.response_language.strip() if payload.response_language else None
+    await db.commit()
+    return LanguagePreference(response_language=user.response_language)
 
 
 @router.get("/api-keys", response_model=list[PersonalApiKeyResponse])

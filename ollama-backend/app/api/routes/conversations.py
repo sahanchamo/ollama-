@@ -254,8 +254,13 @@ async def send_message(
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Knowledge retrieval unavailable: {exc}") from exc
     rag_instruction = build_rag_instruction(context)
     saved_memory = await memory_instruction(db, user.id)
+    language_instruction = (
+        f"Always reply in {user.response_language}. Use that language even if the user writes in another language, "
+        "unless they explicitly request a different language for this answer."
+        if user.response_language else None
+    )
     tool_instruction = await live_domain_context(payload.content)
-    system_context = "\n\n".join(item for item in (saved_memory, rag_instruction, tool_instruction) if item)
+    system_context = "\n\n".join(item for item in (language_instruction, saved_memory, rag_instruction, tool_instruction) if item)
     if system_context:
         messages.insert(0, ChatMessage(role="system", content=system_context))
     ollama_request = ChatRequest(
