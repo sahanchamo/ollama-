@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 
 type User = { email: string; is_admin: boolean };
 type Model = { name: string };
@@ -39,23 +40,9 @@ function createRequestId() {
 }
 
 function MessageContent({ content }: { content: string }) {
-  const blocks = content.split(/```/);
   return (
-    <div className="space-y-4 whitespace-pre-wrap break-words leading-7">
-      {blocks.map((block, index) => {
-        if (index % 2 === 0) return block ? <p key={index}>{block}</p> : null;
-        const [language, ...lines] = block.replace(/^\n/, "").split("\n");
-        const code = lines.join("\n") || language;
-        return (
-          <div key={index} className="overflow-hidden rounded-2xl bg-[#242424] text-sm text-slate-100">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-slate-400">
-              <span>{lines.length ? language || "code" : "text"}</span>
-              <button type="button" onClick={() => navigator.clipboard.writeText(code)} className="hover:text-white">Copy</button>
-            </div>
-            <pre className="overflow-x-auto p-4 font-mono leading-6">{code}</pre>
-          </div>
-        );
-      })}
+    <div className="break-words leading-7 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-600 [&_blockquote]:pl-4 [&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-3 [&_h2]:mt-5 [&_h2]:text-xl [&_h2]:font-semibold [&_li]:ml-5 [&_ol]:my-3 [&_ol]:list-decimal [&_p]:my-3 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:bg-[#242424] [&_pre]:p-4 [&_pre]:leading-6 [&_ul]:my-3 [&_ul]:list-disc">
+      <ReactMarkdown>{content}</ReactMarkdown>
     </div>
   );
 }
