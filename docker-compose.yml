@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
       # Kept private to the VPS so the existing host Nginx can proxy /api/v1.
       - "127.0.0.1:8000:8000"
     environment:
