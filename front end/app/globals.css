@@ -29,3 +29,14 @@ textarea { field-sizing: content; }
 @keyframes cardFloat { 50% { transform: rotateY(-1deg) rotateX(-1deg) translateY(-9px); } }
 @keyframes sheen { from { transform: translateX(-40%) rotate(10deg); } to { transform: translateX(40%) rotate(10deg); } }
 @media (max-width: 1023px) { .login-card { transform: none; animation: none; } }
+
+/* Shared product surface for signed-in workspaces and the control room. */
+.starlen-console { position: relative; isolation: isolate; background-image: radial-gradient(circle at 8% -10%, rgba(56, 189, 248, .15), transparent 29rem), radial-gradient(circle at 100% 0%, rgba(139, 92, 246, .16), transparent 27rem); }
+.starlen-console::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1; opacity: .17; background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px); background-size: 42px 42px; mask-image: linear-gradient(to bottom, black, transparent 65%); }
+.console-hero { background: linear-gradient(125deg, rgba(23, 35, 57, .92), rgba(20, 20, 33, .76)); box-shadow: 0 22px 60px rgba(0,0,0,.22); }
+.starlen-console article, .starlen-console section.overflow-hidden { box-shadow: 0 12px 35px rgba(0,0,0,.12); }
+.starlen-console article { transition: transform .2s ease, border-color .2s ease, background .2s ease; }
+.starlen-console article:hover { transform: translateY(-2px); border-color: rgba(148, 163, 184, .32); }
+.console-status { display: inline-flex; align-items: center; gap: .5rem; border-radius: 999px; padding: .45rem .75rem; background: rgba(255,255,255,.045); }
+.guest-experience .guest-progress b { color: #7dd3fc; }.guest-experience article { animation: messageIn .25s ease-out; }
+@keyframes messageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
