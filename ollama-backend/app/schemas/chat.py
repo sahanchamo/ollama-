@@ -14,6 +14,9 @@ class ChatRequest(BaseModel):
     model: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9._:-]+$")
     messages: list[ChatMessage] = Field(min_length=1, max_length=100)
     temperature: float | None = Field(default=None, ge=0, le=2)
+    # Qwen3 thinks by default. Starlen is a conversational UI, so return the answer
+    # directly rather than leaving CPU-only VPS users waiting for a hidden reasoning trace.
+    think: bool = False
     stream: bool = True
 
     @field_validator("messages")
