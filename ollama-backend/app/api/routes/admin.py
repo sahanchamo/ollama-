@@ -2,15 +2,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import delete, func, select, update
 
 from app.api.deps import AdminUser, DbSession, ROLE_PERMISSIONS, require_permission, roles_for_user
 from app.core.security import create_api_key, hash_password
-from app.db.models import ApiKey, UsageEvent, User, UserQuota, UserRole
+from app.db.models import ApiKey, ModelAccess, UsageEvent, User, UserQuota, UserRole
 from app.schemas.admin import (
     AdminAnalytics, AdminApiKeyCreate, AdminDailyUsage, AdminModelUsage, AdminOverview, AdminRecentUsage,
-    AdminPasswordReset, AdminQuotaUpdate, AdminRoleUpdate, AdminUserCreate, AdminUserQuota, AdminUserRoles, AdminUserUpdate, AdminUserUsage, ApiKeyCreated, ApiKeyResponse,
+    AdminModelAccess, AdminModelAccessUpdate, AdminPasswordReset, AdminQuotaUpdate, AdminRoleUpdate, AdminUserCreate, AdminUserQuota, AdminUserRoles, AdminUserUpdate, AdminUserUsage, ApiKeyCreated, ApiKeyResponse,
 )
 from app.services.quota import monthly_tokens
 
@@ -72,6 +72,7 @@ async def analytics(_: AnalyticsPrincipal, db: DbSession, days: int = Query(defa
         .group_by(func.date(UsageEvent.created_at))
         .order_by(func.date(UsageEvent.created_at))
     )
+
     model_rows = await db.execute(
         select(
             UsageEvent.model,
@@ -114,6 +115,28 @@ async def analytics(_: AnalyticsPrincipal, db: DbSession, days: int = Query(defa
             for event, email in recent_rows
         ],
     )
+
+
+@router.get("/models", response_model=list[AdminModelAccess])
+async def list_models(request: Request, _: AdminUser, db: DbSession) -> list[AdminModelAccess]:
+    try:
+        installed = (await request.app.state.ollama.list_models()).get("models", [])
+    except Exception as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc
+    access = {item.model: item.enabled for item in await db.scalars(select(ModelAccess))}
+    return [AdminModelAccess(model=item["name"], enabled=access.get(item["name"], True)) for item in installed]
+
+
+@router.put("/models/{model_name}", response_model=AdminModelAccess)
+async def set_model_access(model_name: str, payload: AdminModelAccessUpdate, _: AdminUser, db: DbSession) -> AdminModelAccess:
+    access = await db.get(ModelAccess, model_name)
+    if access is None:
+        access = ModelAccess(model=model_name, enabled=payload.enabled)
+        db.add(access)
+    else:
+        access.enabled = payload.enabled
+    await db.commit()
+    return AdminModelAccess(model=model_name, enabled=payload.enabled)
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserUsage)

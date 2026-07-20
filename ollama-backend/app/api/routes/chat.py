@@ -2,11 +2,12 @@ import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import ChatAudit, UsageEvent
+from app.db.models import ChatAudit, ModelAccess, UsageEvent
 from app.schemas.chat import ChatMessage, ChatRequest, GuestChatRequest
 from app.services.rate_limit import limit_request
 from app.services.quota import enforce_quota
@@ -15,6 +16,12 @@ from app.services.domain_lookup import live_domain_context
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = structlog.get_logger()
 GUEST_MESSAGE_LIMIT = 10
+
+
+async def assert_model_available(db: DbSession, model: str, is_admin: bool = False) -> None:
+    access = await db.get(ModelAccess, model)
+    if access is not None and not access.enabled and not is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This model is disabled by the administrator")
 
 
 def prompt_size(payload: ChatRequest) -> int:
@@ -41,10 +48,11 @@ async def record_usage(db: AsyncSession, user_id: object, payload: ChatRequest, 
 
 
 @router.post("/guest")
-async def guest_chat(payload: GuestChatRequest, request: Request):
+async def guest_chat(payload: GuestChatRequest, request: Request, db: DbSession):
     """Stream a disposable preview chat, capped on the server at ten messages."""
     if prompt_size(payload) > min(get_settings().max_prompt_chars, 6000):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Prompt exceeds the guest limit")
+    await assert_model_available(db, payload.model)
 
     forwarded_for = request.headers.get("x-forwarded-for", "")
     client_ip = (forwarded_for.split(",")[0].strip() if forwarded_for else None) or (request.client.host if request.client else "unknown")
@@ -73,9 +81,14 @@ async def guest_chat(payload: GuestChatRequest, request: Request):
 
 
 @router.get("/models")
-async def models(request: Request, _: CurrentUser, __: None = Depends(limit_request)) -> dict:
+async def models(request: Request, user: CurrentUser, db: DbSession, _: None = Depends(limit_request)) -> dict:
     try:
-        return await request.app.state.ollama.list_models()
+        response = await request.app.state.ollama.list_models()
+        if user.is_admin:
+            return response
+        disabled = set(await db.scalars(select(ModelAccess.model).where(ModelAccess.enabled.is_(False))))
+        response["models"] = [item for item in response.get("models", []) if item.get("name") not in disabled]
+        return response
     except httpx.HTTPError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc
 
@@ -90,6 +103,7 @@ async def chat(
 ):
     if prompt_size(payload) > get_settings().max_prompt_chars:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Prompt exceeds configured limit")
+    await assert_model_available(db, payload.model, user.is_admin)
     await enforce_quota(db, user.id)
     latest_user_message = next((message.content for message in reversed(payload.messages) if message.role == "user"), "")
     tool_instruction = await live_domain_context(latest_user_message)

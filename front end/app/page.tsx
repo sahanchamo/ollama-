@@ -9,6 +9,7 @@ type UsageUser = User & { input_tokens: number; output_tokens: number; total_tok
 type Overview = { user_count: number; active_user_count: number; request_count: number; input_tokens: number; output_tokens: number; total_tokens: number; users: UsageUser[] };
 type ApiKey = { id: string; user_id: string; name: string; key_prefix: string; created_at: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null };
 type Analytics = { days: number; active_key_count: number; revoked_key_count: number; daily: { day: string; request_count: number; input_tokens: number; output_tokens: number }[]; models: { model: string; request_count: number; input_tokens: number; output_tokens: number; total_tokens: number; average_duration_ms: number }[]; recent: { id: string; email: string; model: string; input_tokens: number; output_tokens: number; total_duration_ns: number; status: string; created_at: string }[] };
+type ManagedModel = { model: string; enabled: boolean };
 
 const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "/api/gateway").replace(/\/$/, "");
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
@@ -21,6 +22,7 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [rangeDays, setRangeDays] = useState(30);
   const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [managedModels, setManagedModels] = useState<ManagedModel[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [keyName, setKeyName] = useState("Production integration");
   const [expiryDays, setExpiryDays] = useState("90");
@@ -49,11 +51,16 @@ export default function AdminDashboard() {
 
   async function loadDashboard() {
     try {
-      const [nextOverview, nextKeys, nextAnalytics] = await Promise.all([request("/admin/overview"), request("/admin/api-keys"), request(`/admin/analytics?days=${rangeDays}`)]);
-      setOverview(nextOverview); setKeys(nextKeys); setAnalytics(nextAnalytics);
+      const [nextOverview, nextKeys, nextAnalytics, nextModels] = await Promise.all([request("/admin/overview"), request("/admin/api-keys"), request(`/admin/analytics?days=${rangeDays}`), request("/admin/models")]);
+      setOverview(nextOverview); setKeys(nextKeys); setAnalytics(nextAnalytics); setManagedModels(nextModels);
       if (!selectedUserId && nextOverview.users.length) setSelectedUserId(nextOverview.users[0].id);
       setStatus(`Updated ${new Date().toLocaleTimeString()}`);
     } catch (error) { setStatus(`Dashboard error: ${(error as Error).message}`); }
+  }
+
+  async function toggleModel(model: ManagedModel) {
+    try { await request(`/admin/models/${encodeURIComponent(model.model)}`, { method: "PUT", body: JSON.stringify({ enabled: !model.enabled }) }); setStatus(`${model.model} ${model.enabled ? "disabled" : "enabled"}.`); await loadDashboard(); }
+    catch (error) { setStatus(`Could not update model: ${(error as Error).message}`); }
   }
 
   async function createKey() {
@@ -125,6 +132,8 @@ export default function AdminDashboard() {
 
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-400">{status}</p><label className="flex items-center gap-2 text-sm text-slate-400">Analytics range<select value={rangeDays} onChange={(event) => setRangeDays(Number(event.target.value))} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option></select></label></div>
     {overview && <><section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Registered users" value={overview.user_count} tone="text-violet-300" /><Metric label="Active users" value={overview.active_user_count} tone="text-emerald-300" /><Metric label="AI requests" value={overview.request_count} tone="text-cyan-300" /><Metric label="Total tokens" value={compact.format(overview.total_tokens)} tone="text-amber-300" /></section>
+
+    <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><div className="flex items-start justify-between"><div><h2 className="font-semibold">Model access</h2><p className="mt-1 text-sm text-slate-400">Disable a model to immediately remove it from every user’s selector and API access.</p></div><span className="rounded bg-violet-500/15 px-2 py-1 text-xs text-violet-300">Admin control</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{managedModels.map((model) => <div key={model.model} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{model.model}</p><p className={model.enabled ? "mt-1 text-xs text-emerald-300" : "mt-1 text-xs text-rose-300"}>{model.enabled ? "Available to users" : "Disabled for users"}</p></div><button onClick={() => void toggleModel(model)} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${model.enabled ? "bg-rose-500/15 text-rose-200 hover:bg-rose-500/25" : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"}`}>{model.enabled ? "Disable" : "Enable"}</button></div>)}{!managedModels.length && <p className="text-sm text-slate-400">No installed models detected.</p>}</div></section>
 
     {analytics && <section className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_1fr]"><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><div className="flex items-start justify-between"><div><h2 className="font-semibold">Token and request trend</h2><p className="text-sm text-slate-400">Daily activity across the last {analytics.days} days</p></div><span className="rounded bg-cyan-500/15 px-2 py-1 text-xs text-cyan-300">Live database data</span></div><UsageChart points={analytics.daily} /></div><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><h2 className="font-semibold">Model performance</h2><p className="text-sm text-slate-400">Usage and average response time</p><div className="mt-5 space-y-4">{analytics.models.map((model) => <div key={model.model} className="rounded-lg bg-slate-950 p-3"><div className="flex justify-between gap-3"><b className="truncate text-sm">{model.model}</b><span className="text-xs text-slate-400">{model.request_count} requests</span></div><div className="mt-2 flex justify-between text-xs text-slate-400"><span>{compact.format(model.total_tokens)} tokens</span><span>{model.average_duration_ms.toLocaleString()} ms avg</span></div></div>)}{!analytics.models.length && <p className="mt-5 text-sm text-slate-400">No model activity in this range.</p>}</div></div></section>}
 

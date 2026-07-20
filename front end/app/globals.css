@@ -39,4 +39,6 @@ textarea { field-sizing: content; }
 .starlen-console article:hover { transform: translateY(-2px); border-color: rgba(148, 163, 184, .32); }
 .console-status { display: inline-flex; align-items: center; gap: .5rem; border-radius: 999px; padding: .45rem .75rem; background: rgba(255,255,255,.045); }
 .guest-experience .guest-progress b { color: #7dd3fc; }.guest-experience article { animation: messageIn .25s ease-out; }
+.model-picker { display: flex; align-items: center; gap: .25rem; max-width: min(25rem, 55vw); padding: .25rem .4rem .25rem .7rem; border: 1px solid rgba(255,255,255,.1); border-radius: .75rem; background: rgba(255,255,255,.045); }
+.model-picker span { font-size: .68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }.model-picker select { min-width: 0; max-width: 13rem; cursor: pointer; appearance: none; background: transparent; padding: .25rem .4rem; font-size: .875rem; font-weight: 600; outline: none; }.model-picker option { background: #222; color: #eee; }.model-picker button { padding: .2rem .4rem; color: #cbd5e1; border-radius: .4rem; }.model-picker button:hover { background: rgba(255,255,255,.1); }
 @keyframes messageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }

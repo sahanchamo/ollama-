@@ -118,3 +118,12 @@ class AdminUserRoles(BaseModel):
     user_id: UUID
     email: str
     roles: list[str]
+
+
+class AdminModelAccess(BaseModel):
+    model: str
+    enabled: bool
+
+
+class AdminModelAccessUpdate(BaseModel):
+    enabled: bool
