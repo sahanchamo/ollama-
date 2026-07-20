@@ -331,6 +331,7 @@ export default function ChatWorkspace() {
           </div>
           <div className="border-t border-white/10 pt-2">
             <button onClick={() => setDocumentsOpen(true)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">▣ Knowledge base <span className="ml-auto text-xs text-slate-400">{documents.length}</span></button>
+            <Link href="/settings" className="mt-1 block rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">Settings & API keys</Link>
             {user.is_admin && <Link href="/" className="mt-1 block rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">Admin dashboard</Link>}
             <button onClick={logout} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[#2a2a2a]"><span className="grid h-6 w-6 place-items-center rounded-full bg-slate-600 text-[10px]">{user.email.slice(0, 1).toUpperCase()}</span><span className="truncate">{user.email}</span></button>
           </div>

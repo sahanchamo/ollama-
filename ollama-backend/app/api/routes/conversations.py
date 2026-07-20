@@ -5,7 +5,7 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
@@ -67,6 +67,13 @@ async def list_conversations(user: CurrentUser, db: DbSession) -> list[Conversat
         select(Conversation).where(Conversation.user_id == user.id).order_by(desc(Conversation.updated_at))
     )
     return list(result)
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_my_conversations(user: CurrentUser, db: DbSession) -> Response:
+    await db.execute(delete(Conversation).where(Conversation.user_id == user.id))
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("", response_model=ConversationSummary, status_code=status.HTTP_201_CREATED)
