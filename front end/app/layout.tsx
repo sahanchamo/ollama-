@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ollama API Console",
-  description: "Test console for the Ollama Gateway API",
+  title: "Starlen",
+  description: "Starlen private AI workspace",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
