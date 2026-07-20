@@ -23,4 +23,7 @@ class UsageSummary(BaseModel):
     output_tokens: int
     total_tokens: int
     request_count: int
+    monthly_token_limit: int | None
+    monthly_tokens_used: int
+    remaining_tokens: int | None
     events: list[UsageEventResponse]
