@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Local Ollama + VPS Setup Guide</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    body { font: 10.5pt/1.45 Arial, sans-serif; color: #172033; }
+    h1 { color: #155e75; font-size: 23pt; } h2 { color: #0f766e; border-bottom: 1px solid #cbd5e1; margin-top: 22px; padding-bottom: 3px; font-size: 15pt; }
+    .note { background: #ecfeff; border-left: 4px solid #0891b2; padding: 8px 10px; margin: 10px 0; } .warn { background: #fff7ed; border-left: 4px solid #ea580c; padding: 8px 10px; margin: 10px 0; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0f172a; color: #e2e8f0; border-radius: 5px; padding: 9px; font: 8.8pt/1.35 Consolas, monospace; } li { margin: 7px 0; } code { font-family: Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <h1>Local Ollama + VPS Setup</h1>
+  <p>Run the AI model on your Windows PC GPU and host the website/backend on your VPS.</p>
+  <div class="note"><strong>Installed model:</strong> <code>qwen3.5:4b</code>. It runs in Docker on your PC.</div>
+  <h2>1. Windows PC: install Docker Desktop</h2>
+  <p>Open PowerShell as Administrator:</p>
+  <pre>wsl --update
+winget install -e --id Docker.DockerDesktop</pre>
+  <p>Restart if Docker requests it. Open Docker Desktop and wait for <em>Engine running</em>.</p>
+  <pre>docker version</pre>
+  <h2>2. Windows PC: start Ollama with GPU</h2>
+  <pre>docker volume create ollama
+
+docker run -d `
+  --name ollama `
+  --restart unless-stopped `
+  --gpus all `
+  -e OLLAMA_KEEP_ALIVE=30m `
+  -e OLLAMA_NUM_PARALLEL=1 `
+  -e OLLAMA_MAX_LOADED_MODELS=1 `
+  -v ollama:/root/.ollama `
+  -p 127.0.0.1:11434:11434 `
+  ollama/ollama
+
+docker ps</pre>
+  <h2>3. Windows PC: install and test the model</h2>
+  <pre>docker exec -it ollama ollama pull qwen3.5:4b
+docker exec -it ollama ollama list
+docker exec -it ollama ollama run qwen3.5:4b "Say hello in one short sentence."
+docker exec ollama ollama ps
+nvidia-smi</pre>
+  <div class="warn"><strong>Do not use:</strong> <code>qwen3.5:7b</code>; that tag does not exist. For your 8 GB GPU and fast replies, use <code>qwen3.5:4b</code>.</div>
+  <h2>4. Private PC-to-VPS connection with Tailscale</h2>
+  <p>Install Tailscale on the Windows PC, sign in, then run PowerShell as Administrator:</p>
+  <pre>tailscale status
+tailscale serve --bg --http=11434 http://127.0.0.1:11434
+tailscale serve status</pre>
+  <p>Your current private model address:</p>
+  <pre>http://desktop-2ram9tm.tail48accd.ts.net:11434</pre>
+  <div class="note">Never use Tailscale Funnel and never open router port 11434. Tailscale Serve keeps Ollama private to your tailnet.</div>
+  <h2>5. VPS: install Tailscale and test Ollama</h2>
+  <pre>curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+
+curl http://desktop-2ram9tm.tail48accd.ts.net:11434/api/tags</pre>
+  <p>The last command must list <code>qwen3.5:4b</code>.</p>
+  <h2>6. VPS: connect the running gateway</h2>
+  <pre>cd /var/www/ollama-gateway
+cp docker-compose.yml docker-compose.yml.before-local-ollama
+
+sed -i 's|OLLAMA_BASE_URL: http://ollama:11434|OLLAMA_BASE_URL: http://desktop-2ram9tm.tail48accd.ts.net:11434|' docker-compose.yml
+
+grep -n 'OLLAMA_BASE_URL' docker-compose.yml
+docker compose up -d --no-deps --force-recreate gateway
+curl http://127.0.0.1:8000/health/ready</pre>
+  <p>Health must return <code>"ollama":true</code>.</p>
+  <h2>7. Fast replies</h2>
+  <ol><li>Keep <code>OLLAMA_NUM_PARALLEL=1</code> and <code>OLLAMA_MAX_LOADED_MODELS=1</code> on the PC.</li><li>Use streaming in the website so users see tokens immediately.</li><li>Disable thinking for ordinary chat requests by sending <code>"think": false</code> to Ollama.</li><li>Use a context window around 4096 and cap response length for normal chat.</li></ol>
+  <pre>time curl -s http://desktop-2ram9tm.tail48accd.ts.net:11434/api/generate \
+  -d '{"model":"qwen3.5:4b","prompt":"Reply only: OK","stream":false,"think":false,"options":{"num_predict":16,"num_ctx":4096}}'</pre>
+  <p>First request can be slower while the model loads into GPU memory. Do not press Ctrl+C while it is loading.</p>
+</body>
+</html>

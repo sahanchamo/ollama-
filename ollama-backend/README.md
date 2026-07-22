@@ -25,7 +25,7 @@ Only Nginx publishes a port. PostgreSQL, Redis, and FastAPI use the private Dock
    docker compose exec ollama ollama pull qwen2.5:3b
    ```
 
-3. Install Tailscale on both the VPS and the PC, and sign both devices into the same tailnet. On Windows, create a user environment variable `OLLAMA_HOST=0.0.0.0:11434`, quit Ollama from the taskbar, and start it again. Allow port 11434 only from the VPS in your Tailscale access policy/firewall; never create a public router or cloud firewall rule for that port. Set `OLLAMA_BASE_URL` to `http://YOUR_PC_TAILSCALE_IP:11434`.
+3. Install Tailscale on both the VPS and the PC, and sign both devices into the same tailnet. Keep Ollama bound to `127.0.0.1` and expose it only inside the tailnet with `tailscale serve --bg --http=11434 http://127.0.0.1:11434`. Set `OLLAMA_BASE_URL` to the exact hostname printed by that command, for example `http://your-pc.tailnet.ts.net:11434`. Never create a public router or cloud firewall rule for port 11434.
 4. On the PC, pull and warm your chosen 7B model, then confirm its exact name with `ollama list`. Use that exact name when creating conversations in the app.
 5. Start the VPS stack with `docker compose up -d --build`, then visit `http://YOUR_SERVER/docs`. Put TLS in front of Nginx (Caddy, Certbot, Cloudflare, or your VPS load balancer) before public use.
 

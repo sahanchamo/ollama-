@@ -116,6 +116,17 @@ export default function ChatWorkspace() {
     instance.start();
   }
 
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+      setPrompt((current) => current ? `${current}\n${text}` : text);
+      setNotice("Text pasted from clipboard.");
+    } catch {
+      setNotice("Clipboard access was blocked. Use Ctrl+V (or Cmd+V) to paste.");
+    }
+  }
+
   function speak(message: Message) {
     if (!window.speechSynthesis) {
       setNotice("Spoken responses are not supported by this browser.");
@@ -342,7 +353,7 @@ export default function ChatWorkspace() {
               <article key={message.id} className={`group mb-8 flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={message.role === "user" ? "max-w-[82%] rounded-[24px] bg-[#303030] px-5 py-3 leading-7 shadow-sm" : "w-full px-1 py-1"}>
                   {message.content ? <MessageContent content={message.content} /> : message.status === "streaming" ? <span className="animate-pulse text-slate-400">Thinking…</span> : null}
-                  {message.role === "assistant" && message.content && <div className="mt-3 flex gap-3 text-sm text-slate-500 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" onClick={() => navigator.clipboard.writeText(message.content)} className="hover:text-white">▣ Copy</button><button type="button" onClick={() => speak(message)} className="hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button><span>⌘</span><span>↻</span></div>}
+                  {message.role === "assistant" && message.content && <div className="mt-3 flex gap-3 text-sm text-slate-400"><button type="button" onClick={() => { void navigator.clipboard.writeText(message.content); setNotice("Response copied to clipboard."); }} className="rounded px-2 py-1 hover:bg-white/10 hover:text-white">Copy</button><button type="button" onClick={() => speak(message)} className="rounded px-2 py-1 hover:bg-white/10 hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button></div>}
                 </div>
               </article>
             )) : (
@@ -365,7 +376,7 @@ export default function ChatWorkspace() {
             <input ref={fileInput} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadDocument(file); event.currentTarget.value = ""; }} />
             <div className="rounded-[28px] border border-white/10 bg-[#303030] p-3 shadow-2xl shadow-black/30 transition focus-within:border-white/20 focus-within:bg-[#353535]">
               <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} disabled={busy} rows={1} placeholder="Ask anything" className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-slate-400" />
-              <div className="flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10">＋ Add document</button><button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || !prompt.trim()} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
+              <div className="flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10">＋ Add document</button><button type="button" onClick={() => void pasteFromClipboard()} disabled={busy} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-50">Paste</button><button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || !prompt.trim()} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
             </div>
             <p className="mt-2 text-center text-xs text-slate-500">Ollama can make mistakes. Check important information.</p>
           </div>
