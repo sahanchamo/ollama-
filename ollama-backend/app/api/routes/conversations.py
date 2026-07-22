@@ -243,10 +243,13 @@ async def send_message(
     conversation = await owned_conversation(db, conversation_id, user.id)
     await assert_model_available(db, conversation.model, user.is_admin)
     images = validate_images(payload.images)
-    if images and "vl" not in conversation.model.lower():
+    # Qwen 3.5 models are vision-capable even though their names do not use the
+    # older `-vl` suffix (for example, qwen3.5:4b installed on the local GPU).
+    vision_model = conversation.model.lower()
+    if images and "vl" not in vision_model and not vision_model.startswith("qwen3.5"):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Screenshots require a vision model. Select qwen3-vl:2b or qwen3-vl:4b, then retry.",
+            "Screenshots require a vision model. Select qwen3.5:4b or a qwen3-vl model, then retry.",
         )
     user_message = Message(conversation_id=conversation.id, role="user", content=payload.content)
     db.add(user_message)
