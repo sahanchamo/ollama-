@@ -172,3 +172,19 @@ main:has(.model-picker) form > div > div { border-color: var(--product-line) !im
 .admin-shell-layout table th, .admin-shell-layout table td { border-color: var(--product-line); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+/* Home dashboard: a single purposeful 3D object representing the active AI workspace. */
+.admin-topbar .admin-hero-visual { display: block !important; right: 3rem; width: 230px; height: 150px; opacity: 1; perspective: 850px; }
+.admin-topbar .hero-orbit { display: block; inset: 26px 18px; border: 1px solid rgba(155,182,209,.28); border-radius: 50%; transform-style: preserve-3d; transform: rotateX(66deg) rotateZ(18deg); animation: workspaceOrbit 13s linear infinite; }
+.admin-topbar .hero-orbit-two { inset: 43px 35px; border-color: rgba(241,240,236,.16); transform: rotateX(72deg) rotateZ(118deg); animation-duration: 18s; animation-direction: reverse; }
+.admin-topbar .hero-core { display: grid; width: 66px; height: 66px; place-items: center; border: 1px solid rgba(197,217,235,.7); border-radius: 10px; background: #313946; box-shadow: 12px 15px 0 #151817, 0 16px 30px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.16); transform: translate(-50%, -50%) rotateX(56deg) rotateZ(-34deg); animation: workspaceCore 5s ease-in-out infinite; }
+.admin-topbar .hero-core::before, .admin-topbar .hero-core::after { content: ""; position: absolute; inset: 12px; border: 1px solid rgba(197,217,235,.3); border-radius: 5px; transform: translateZ(10px); }
+.admin-topbar .hero-core::after { inset: 21px; border-color: var(--product-accent-strong); background: var(--product-accent); box-shadow: 0 0 18px rgba(155,182,209,.28); transform: translateZ(14px); }
+.admin-topbar .hero-core i { z-index: 2; width: 28px; background: rgba(255,255,255,.32); }
+.admin-topbar .hero-particle { display: block; width: 5px; height: 5px; background: var(--product-accent-strong); box-shadow: 0 0 13px rgba(197,217,235,.45); animation: workspaceParticle 4s ease-in-out infinite alternate; }
+.admin-topbar .hero-particle-one { top: 22px; left: 42px; }.admin-topbar .hero-particle-two { right: 28px; bottom: 17px; animation-delay: -1.5s; }
+@keyframes workspaceOrbit { to { transform: rotateX(66deg) rotateZ(378deg); } }
+@keyframes workspaceCore { 50% { transform: translate(-50%, -57%) rotateX(58deg) rotateZ(-22deg); } }
+@keyframes workspaceParticle { to { transform: translate3d(13px, -11px, 12px); opacity: .42; } }
+@media (max-width: 800px) { .admin-topbar .admin-hero-visual { display: none !important; } }
+@media (prefers-reduced-motion: reduce) { .admin-topbar .hero-orbit, .admin-topbar .hero-core, .admin-topbar .hero-particle { animation: none !important; } }
