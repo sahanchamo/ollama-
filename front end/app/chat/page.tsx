@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 
@@ -10,7 +10,6 @@ type Model = { name: string };
 type Conversation = { id: string; title: string; model: string; updated_at: string };
 type Message = { id: string; role: "user" | "assistant" | "system"; content: string; status: string; created_at: string; images?: string[] };
 type Detail = Conversation & { messages: Message[] };
-type Document = { id: string; filename: string; chunk_count: number };
 type Memory = { id: string; content: string; created_at: string };
 type BrowserSpeechRecognition = {
   continuous: boolean;
@@ -49,8 +48,9 @@ function MessageContent({ content }: { content: string }) {
 
 export default function ChatWorkspace() {
   const router = useRouter();
-  const fileInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
+  const documentInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const recognition = useRef<BrowserSpeechRecognition | null>(null);
   const [token, setToken] = useState("");
   const [user, setUser] = useState<User | null>(null);
@@ -61,11 +61,10 @@ export default function ChatWorkspace() {
   const [active, setActive] = useState<Detail | null>(null);
   const [prompt, setPrompt] = useState("");
   const [attachedImages, setAttachedImages] = useState<{ name: string; data: string }[]>([]);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [draggingImages, setDraggingImages] = useState(false);
-  const [documents, setDocuments] = useState<Document[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memoryDraft, setMemoryDraft] = useState("");
-  const [documentsOpen, setDocumentsOpen] = useState(false);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -73,6 +72,8 @@ export default function ChatWorkspace() {
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [alternatives, setAlternatives] = useState<Record<string, string>>({});
+  const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
 
@@ -155,7 +156,6 @@ export default function ChatWorkspace() {
   }
 
   async function loadConversations() { setConversations(await api("/conversations")); }
-  async function loadDocuments() { setDocuments(await api("/knowledge/documents")); }
   async function loadMemories() { setMemories(await api("/memory")); }
   async function saveMemory() {
     const content = memoryDraft.trim();
@@ -178,6 +178,7 @@ export default function ChatWorkspace() {
 
   async function createConversation() {
     try {
+      setActive(null); setPrompt(""); setAttachedImages([]); setAttachmentMenuOpen(false);
       const created = await api("/conversations", { method: "POST", body: JSON.stringify({ model }) });
       await loadConversations();
       await openConversation(created.id);
@@ -223,20 +224,6 @@ export default function ChatWorkspace() {
     } catch (error) { setNotice(`Could not change model: ${(error as Error).message}`); }
   }
 
-  async function uploadDocument(file: File) {
-    setBusy(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch(`${base}/knowledge/documents`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.detail || "Upload failed");
-      await loadDocuments();
-      setNotice(`${data.filename} is ready for answers.`);
-    } catch (error) { setNotice(`Upload failed: ${(error as Error).message}`); }
-    finally { setBusy(false); }
-  }
-
   async function addScreenshot(file: File) {
     if (!file.type.startsWith("image/")) { setNotice("Choose a PNG, JPG, WEBP, or other image file."); return; }
     if (file.size > 5 * 1024 * 1024) { setNotice("Each screenshot must be 5 MB or smaller."); return; }
@@ -249,6 +236,26 @@ export default function ChatWorkspace() {
     } catch (error) { setNotice((error as Error).message); }
   }
 
+  async function regenerateResponse(message: Message) {
+    if (!active || regeneratingMessageId) return;
+    setRegeneratingMessageId(message.id);
+    try {
+      const alternative = await api(`/conversations/${active.id}/messages/${message.id}/regenerate`, { method: "POST" });
+      setAlternatives((current) => ({ ...current, [message.id]: alternative.content }));
+    } catch (error) { setNotice(`Could not regenerate response: ${(error as Error).message}`); }
+    finally { setRegeneratingMessageId(null); }
+  }
+
+  async function chooseAlternative(message: Message, content: string) {
+    if (!active) return;
+    try {
+      const updated = await api(`/conversations/${active.id}/messages/${message.id}/content`, { method: "PUT", body: JSON.stringify({ content }) });
+      setActive((current) => current ? { ...current, messages: current.messages.map((item) => item.id === message.id ? updated : item) } : current);
+      setAlternatives((current) => { const next = { ...current }; delete next[message.id]; return next; });
+      setNotice("Your preferred answer was saved.");
+    } catch (error) { setNotice(`Could not save preferred answer: ${(error as Error).message}`); }
+  }
+
   async function addScreenshots(files: File[]) {
     for (const file of files) {
       if (attachedImages.length >= 4) break;
@@ -256,10 +263,44 @@ export default function ChatWorkspace() {
     }
   }
 
-  async function deleteDocument(id: string) {
-    try { await api(`/knowledge/documents/${id}`, { method: "DELETE" }); await loadDocuments(); }
-    catch (error) { setNotice((error as Error).message); }
+  async function attachDocuments(files: File[]) {
+    const selected = files.filter((file) => file.size <= 10 * 1024 * 1024);
+    if (!selected.length) { setNotice("Choose text/code files that are 10 MB or smaller."); return; }
+    if (selected.length !== files.length) setNotice("Some files were skipped because they exceed 10 MB.");
+    setBusy(true);
+    try {
+      let chat = active;
+      if (!chat) {
+        const created = await api("/conversations", { method: "POST", body: JSON.stringify({ model }) });
+        await loadConversations();
+        chat = await api(`/conversations/${created.id}`);
+        setActive(chat);
+      }
+      if (!chat) throw new Error("Could not create a chat for this document");
+      const attached: string[] = [];
+      for (const file of selected) {
+        const form = new FormData(); form.append("file", file, file.webkitRelativePath || file.name);
+        const response = await fetch(`${base}/knowledge/documents`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+        const document = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(document?.detail || `Could not upload ${file.name}`);
+        await api(`/conversations/${chat.id}/knowledge/${document.id}`, { method: "PUT" });
+        attached.push(document.filename);
+      }
+      setNotice(`${attached.length} file${attached.length === 1 ? "" : "s"} attached to this chat and ready to use.`);
+    } catch (error) { setNotice((error as Error).message); }
+    finally { setBusy(false); }
   }
+
+  function pasteScreenshots(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const images = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (!images.length) return;
+    event.preventDefault();
+    void addScreenshots(images);
+  }
+
 
   async function send(event: FormEvent) {
     event.preventDefault();
@@ -324,7 +365,7 @@ export default function ChatWorkspace() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([loadModels(), loadConversations(), loadDocuments(), loadMemories()]).catch((error) => setNotice((error as Error).message));
+    Promise.all([loadModels(), loadConversations(), loadMemories()]).catch((error) => setNotice((error as Error).message));
   }, [token]);
 
   useEffect(() => {
@@ -371,7 +412,6 @@ export default function ChatWorkspace() {
             {!conversations.length && <p className="px-3 py-3 text-xs leading-5 text-slate-500">Your chat history will appear here.</p>}
           </div>
           <div className="border-t border-white/10 pt-2">
-            <button onClick={() => setDocumentsOpen(true)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">▣ Knowledge base <span className="ml-auto text-xs text-slate-400">{documents.length}</span></button>
             <Link href="/settings" className="mt-1 block rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">Settings & API keys</Link>
             {user.is_admin && <Link href="/" className="mt-1 block rounded-lg px-3 py-2 text-sm hover:bg-[#2a2a2a]">Admin dashboard</Link>}
             <button onClick={logout} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[#2a2a2a]"><span className="grid h-6 w-6 place-items-center rounded-full bg-slate-600 text-[10px]">{user.email.slice(0, 1).toUpperCase()}</span><span className="truncate">{user.email}</span></button>
@@ -397,7 +437,7 @@ export default function ChatWorkspace() {
                 <div className={message.role === "user" ? "max-w-[82%] rounded-[24px] bg-[#303030] px-5 py-3 leading-7 shadow-sm" : "w-full px-1 py-1"}>
                   {message.images?.length ? <div className="mb-3 flex flex-wrap gap-2">{message.images.map((image, index) => <img key={`${message.id}-${index}`} src={`data:image/*;base64,${image}`} alt={`Attached screenshot ${index + 1}`} className="max-h-56 max-w-full rounded-xl border border-white/10 object-contain" />)}</div> : null}
                   {message.content ? <MessageContent content={message.content} /> : message.status === "streaming" ? <span className="animate-pulse text-slate-400">Thinking…</span> : null}
-                  {message.role === "assistant" && message.content && <div className="mt-3 flex gap-3 text-sm text-slate-500 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" onClick={() => navigator.clipboard.writeText(message.content)} className="hover:text-white">▣ Copy</button><button type="button" onClick={() => speak(message)} className="hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button><span>⌘</span><span>↻</span></div>}
+                  {message.role === "assistant" && message.content && <><div className="mt-3 flex gap-3 text-sm text-slate-500 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" onClick={() => navigator.clipboard.writeText(message.content)} className="hover:text-white">▣ Copy</button><button type="button" onClick={() => speak(message)} className="hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button><button type="button" onClick={() => void regenerateResponse(message)} disabled={regeneratingMessageId === message.id} className="hover:text-white disabled:opacity-50">{regeneratingMessageId === message.id ? "Regenerating…" : "↻ Regenerate"}</button></div>{alternatives[message.id] && <div className="mt-5 rounded-2xl border border-sky-300/25 bg-sky-300/5 p-4"><p className="text-xs font-semibold uppercase tracking-[.14em] text-sky-200">Alternative answer</p><div className="mt-3"><MessageContent content={alternatives[message.id]} /></div><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => setAlternatives((current) => { const next = { ...current }; delete next[message.id]; return next; })} className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-white/10">Keep original</button><button type="button" onClick={() => void chooseAlternative(message, alternatives[message.id])} className="rounded-lg bg-sky-300 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-sky-200">Use alternative</button></div></div>}</>}
                 </div>
               </article>
             )) : (
@@ -418,12 +458,15 @@ export default function ChatWorkspace() {
 
         <form onSubmit={send} className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent px-4 pb-5 pt-14">
           <div className="mx-auto max-w-3xl">
-            <input ref={fileInput} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadDocument(file); event.currentTarget.value = ""; }} />
             <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void addScreenshot(file); event.currentTarget.value = ""; }} />
+            <input ref={documentInput} type="file" multiple className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />
+            {/* Folder input uses Chromium's directory picker, supported by VS Code/Chrome-based browsers. */}
+            {/* @ts-expect-error webkitdirectory is a browser-specific input attribute. */}
+            <input ref={folderInput} type="file" multiple webkitdirectory="" className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />
             <div className="rounded-[28px] border border-white/10 bg-[#303030] p-3 shadow-2xl shadow-black/30 transition focus-within:border-white/20 focus-within:bg-[#353535]">
               {attachedImages.length > 0 && <div className="mb-2 flex flex-wrap gap-2 px-2">{attachedImages.map((image, index) => <div key={`${image.name}-${index}`} className="group relative"><img src={`data:image/*;base64,${image.data}`} alt={image.name} className="h-16 w-20 rounded-lg border border-white/10 object-cover" /><button type="button" onClick={() => setAttachedImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${image.name}`} className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-black text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div>}
-              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} disabled={busy} rows={1} placeholder="Ask anything" className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-slate-400" />
-              <div className="flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => imageInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-sky-200 hover:bg-white/10">▧ Add screenshot</button><button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10">＋ Add document</button><button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || (!prompt.trim() && !attachedImages.length)} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
+              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onPaste={pasteScreenshots} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} disabled={busy} rows={1} placeholder="Ask anything · paste a screenshot with Ctrl+V" className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-slate-400" />
+              <div className="flex items-center justify-between"><div className="relative flex items-center gap-1"><button type="button" onClick={() => setAttachmentMenuOpen((open) => !open)} disabled={busy} aria-expanded={attachmentMenuOpen} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-50">📎 Attach</button>{attachmentMenuOpen && <div className="absolute bottom-10 left-0 z-20 w-44 rounded-xl border border-white/10 bg-[#252525] p-1 shadow-2xl"><button type="button" onClick={() => { setAttachmentMenuOpen(false); documentInput.current?.click(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Upload files</button><button type="button" onClick={() => { setAttachmentMenuOpen(false); folderInput.current?.click(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Upload folder</button></div>}<button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || (!prompt.trim() && !attachedImages.length)} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
             </div>
             <p className="mt-2 text-center text-xs text-slate-500">Ollama can make mistakes. Check important information.</p>
           </div>
@@ -435,7 +478,6 @@ export default function ChatWorkspace() {
       {draggingImages && <div className="pointer-events-none fixed inset-3 z-50 grid place-items-center rounded-[32px] border-2 border-dashed border-sky-300 bg-sky-400/10 backdrop-blur-sm"><div className="rounded-3xl border border-white/20 bg-[#1d2538]/95 px-10 py-8 text-center shadow-2xl"><div className="text-3xl">▧</div><h2 className="mt-3 text-xl font-semibold">Drop screenshots to analyze</h2><p className="mt-2 text-sm text-slate-300">Up to four images · 5 MB each · use a vision model</p></div></div>}
       {deleteTarget && <div role="dialog" aria-modal="true" aria-labelledby="delete-chat-title" className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4"><div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#2a2a2a] p-5 shadow-2xl"><div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-rose-500/15 text-rose-300">!</span><div><h2 id="delete-chat-title" className="font-semibold">Delete conversation?</h2><p className="mt-1 text-sm text-slate-400">“{deleteTarget.title}” and its messages will be permanently removed.</p></div></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-lg px-4 py-2 text-sm hover:bg-white/10">Cancel</button><button type="button" onClick={() => void confirmDeleteConversation()} className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400">Delete</button></div></div></div>}
 
-      {documentsOpen && <aside className="absolute inset-y-0 right-0 z-20 w-full max-w-sm border-l border-white/10 bg-[#171717] p-5 shadow-2xl"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Knowledge base</h2><p className="text-xs text-slate-400">Private RAG documents</p></div><button onClick={() => setDocumentsOpen(false)} className="rounded-lg p-2 hover:bg-white/10">✕</button></div><button type="button" onClick={() => fileInput.current?.click()} className="mt-5 w-full rounded-xl border border-dashed border-white/20 px-4 py-5 text-sm text-slate-300 hover:bg-white/5">＋ Upload a TXT, MD, or PDF</button><p className="mt-2 text-xs text-slate-500">Documents are indexed privately and supplied only when relevant.</p><div className="mt-6 space-y-2">{documents.map((document) => <div key={document.id} className="flex items-center gap-3 rounded-xl bg-[#2f2f2f] p-3"><span className="min-w-0 flex-1 truncate text-sm">{document.filename}<small className="ml-2 text-slate-400">{document.chunk_count} chunks</small></span><button onClick={() => deleteDocument(document.id)} className="text-xs text-rose-300 hover:text-rose-200">Delete</button></div>)}{!documents.length && <p className="text-sm text-slate-400">No documents yet.</p>}</div></aside>}
       {memoriesOpen && <aside className="absolute inset-y-0 right-0 z-30 w-full max-w-sm border-l border-white/10 bg-[#171717] p-5 shadow-2xl"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Long-term memory</h2><p className="text-xs text-slate-400">Private facts and preferences used across chats</p></div><button onClick={() => setMemoriesOpen(false)} aria-label="Close memory" className="rounded-lg p-2 hover:bg-white/10">Close</button></div><textarea value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} maxLength={2000} rows={4} placeholder="Example: I prefer concise answers and work in Sri Lanka." className="mt-5 w-full resize-none rounded-xl border border-white/10 bg-[#2a2a2a] p-3 text-sm outline-none focus:border-white/30" /><button type="button" onClick={() => void saveMemory()} disabled={!memoryDraft.trim()} className="mt-2 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black disabled:bg-slate-600 disabled:text-slate-300">Save memory</button><p className="mt-3 text-xs leading-5 text-slate-500">Memories are used as private context in future chats. Delete any memory you no longer want used.</p><div className="mt-5 space-y-2 overflow-y-auto"><h3 className="text-xs font-medium uppercase tracking-wide text-slate-400">Saved memories</h3>{memories.map((memory) => <div key={memory.id} className="rounded-xl bg-[#2f2f2f] p-3"><p className="whitespace-pre-wrap text-sm leading-5">{memory.content}</p><button onClick={() => void deleteMemory(memory.id)} className="mt-2 text-xs text-rose-300 hover:text-rose-200">Delete</button></div>)}{!memories.length && <p className="text-sm text-slate-400">No saved memories yet.</p>}</div></aside>}
     </main>
   );

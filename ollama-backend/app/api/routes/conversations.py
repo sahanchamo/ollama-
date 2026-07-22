@@ -11,7 +11,7 @@ from sqlalchemy import delete, desc, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import Conversation, Message, UsageEvent, UserMemory
+from app.db.models import Conversation, ConversationKnowledgeDocument, KnowledgeDocument, Message, UsageEvent, UserMemory
 from app.db.session import SessionLocal
 from app.schemas.chat import (
     ChatMessage,
@@ -20,9 +20,11 @@ from app.schemas.chat import (
     ConversationDetail,
     ConversationUpdate,
     ConversationSummary,
+    MessageContentUpdate,
     MessageResponse,
     SendMessageRequest,
 )
+from app.schemas.rag import DocumentResponse
 from app.services.rate_limit import limit_request
 from app.services.rag import build_rag_instruction, retrieve_context
 from app.services.quota import enforce_quota
@@ -98,7 +100,7 @@ def recent_model_messages(previous: list[Message]) -> list[ChatMessage]:
             break
         selected.append(message)
         chars += len(message.content)
-    return [ChatMessage(role=message.role, content=message.content) for message in reversed(selected)]
+    return [ChatMessage(role=message.role, content=message.content, images=message.images or None) for message in reversed(selected)]
 
 
 @router.get("", response_model=list[ConversationSummary])
@@ -164,6 +166,66 @@ async def update_conversation(
 async def delete_conversation(conversation_id: UUID, user: CurrentUser, db: DbSession) -> Response:
     conversation = await owned_conversation(db, conversation_id, user.id)
     await db.delete(conversation)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{conversation_id}/messages/{message_id}/regenerate")
+async def regenerate_message(conversation_id: UUID, message_id: UUID, request: Request, user: CurrentUser, db: DbSession) -> dict[str, str]:
+    conversation = await owned_conversation(db, conversation_id, user.id)
+    await assert_model_available(db, conversation.model, user)
+    history = list(await db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at)))
+    target_index = next((index for index, message in enumerate(history) if message.id == message_id and message.role == "assistant"), None)
+    if target_index is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assistant message not found")
+    user_index = next((index for index in range(target_index - 1, -1, -1) if history[index].role == "user"), None)
+    if user_index is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "No user message is available to regenerate")
+    messages = recent_model_messages(history[:user_index + 1])
+    response = await request.app.state.ollama.chat(ChatRequest(model=conversation.model, messages=messages, stream=False))
+    content = response.get("message", {}).get("content", "").strip()
+    if not content:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Model returned an empty response")
+    return {"content": content}
+
+
+@router.put("/{conversation_id}/messages/{message_id}/content", response_model=MessageResponse)
+async def choose_regenerated_message(conversation_id: UUID, message_id: UUID, payload: MessageContentUpdate, user: CurrentUser, db: DbSession) -> Message:
+    conversation = await owned_conversation(db, conversation_id, user.id)
+    message = await db.scalar(select(Message).where(Message.id == message_id, Message.conversation_id == conversation.id, Message.role == "assistant"))
+    if message is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assistant message not found")
+    message.content = payload.content
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
+@router.get("/{conversation_id}/knowledge", response_model=list[DocumentResponse])
+async def conversation_knowledge(conversation_id: UUID, user: CurrentUser, db: DbSession) -> list[KnowledgeDocument]:
+    conversation = await owned_conversation(db, conversation_id, user.id)
+    return list(await db.scalars(
+        select(KnowledgeDocument).join(ConversationKnowledgeDocument, ConversationKnowledgeDocument.document_id == KnowledgeDocument.id)
+        .where(ConversationKnowledgeDocument.conversation_id == conversation.id).order_by(KnowledgeDocument.filename)
+    ))
+
+
+@router.put("/{conversation_id}/knowledge/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def attach_knowledge(conversation_id: UUID, document_id: UUID, user: CurrentUser, db: DbSession) -> Response:
+    conversation = await owned_conversation(db, conversation_id, user.id)
+    document = await db.scalar(select(KnowledgeDocument).where(KnowledgeDocument.id == document_id, KnowledgeDocument.user_id == user.id))
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Knowledge document not found")
+    if await db.get(ConversationKnowledgeDocument, {"conversation_id": conversation.id, "document_id": document.id}) is None:
+        db.add(ConversationKnowledgeDocument(conversation_id=conversation.id, document_id=document.id))
+        await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{conversation_id}/knowledge/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def detach_knowledge(conversation_id: UUID, document_id: UUID, user: CurrentUser, db: DbSession) -> Response:
+    conversation = await owned_conversation(db, conversation_id, user.id)
+    await db.execute(delete(ConversationKnowledgeDocument).where(ConversationKnowledgeDocument.conversation_id == conversation.id, ConversationKnowledgeDocument.document_id == document_id))
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -251,7 +313,7 @@ async def send_message(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Screenshots require a vision model. Select qwen3.5:4b or a qwen3-vl model, then retry.",
         )
-    user_message = Message(conversation_id=conversation.id, role="user", content=payload.content)
+    user_message = Message(conversation_id=conversation.id, role="user", content=payload.content, images=images)
     db.add(user_message)
     if conversation.title == "New chat":
         conversation.title = chat_title(payload.content)
@@ -266,7 +328,8 @@ async def send_message(
     if images:
         messages[-1].images = images
     try:
-        context = await retrieve_context(db, request.app.state.ollama, user.id, payload.content)
+        document_ids = list(await db.scalars(select(ConversationKnowledgeDocument.document_id).where(ConversationKnowledgeDocument.conversation_id == conversation.id)))
+        context = await retrieve_context(db, request.app.state.ollama, user.id, payload.content, document_ids)
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Knowledge retrieval unavailable: {exc}") from exc
     rag_instruction = build_rag_instruction(context)

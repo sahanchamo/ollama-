@@ -1,6 +1,8 @@
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
+from uuid import UUID
+from zipfile import BadZipFile, ZipFile
 
 from pypdf import PdfReader
 from sqlalchemy import select
@@ -10,16 +12,56 @@ from app.core.config import get_settings
 from app.db.models import DocumentChunk, KnowledgeDocument
 from app.services.ollama import OllamaService
 
-ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf"}
+ARCHIVE_EXTENSION = ".zip"
 
 
 def extract_text(filename: str, raw: bytes) -> str:
     extension = Path(filename).suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
-        raise ValueError("Supported documents are .txt, .md, and .pdf")
+    if extension == ARCHIVE_EXTENSION:
+        return extract_zip_text(raw)
     if extension == ".pdf":
         return "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(raw)).pages).strip()
-    return raw.decode("utf-8", errors="replace").strip()
+    return extract_source_text(raw)
+
+
+def extract_source_text(raw: bytes) -> str:
+    """Accept any text-based source/configuration file while rejecting binaries."""
+    if b"\x00" in raw:
+        raise ValueError("Binary files cannot be attached; choose a text-based source file or ZIP archive")
+    text = raw.decode("utf-8", errors="replace").strip()
+    if not text:
+        raise ValueError("No readable text was found in this file")
+    controls = sum(1 for character in text if ord(character) < 32 and character not in "\n\r\t")
+    if controls > max(20, len(text) // 50):
+        raise ValueError("This file does not appear to be text-based source code")
+    return text
+
+
+def extract_zip_text(raw: bytes) -> str:
+    """Safely combine supported documents from an uploaded archive into one RAG source."""
+    maximum = get_settings().rag_max_upload_bytes
+    try:
+        with ZipFile(BytesIO(raw)) as archive:
+            entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+            if not entries:
+                raise ValueError("The ZIP file contains no files")
+            total_size = sum(entry.file_size for entry in entries)
+            if total_size > maximum:
+                raise ValueError("The extracted ZIP contents exceed the document upload limit")
+            parts: list[str] = []
+            for entry in entries:
+                try:
+                    text = extract_text(entry.filename, archive.read(entry))
+                except ValueError:
+                    # Archives often contain binary build artifacts; only index readable source files.
+                    continue
+                if text:
+                    parts.append(f"[File: {Path(entry.filename).name}]\n{text}")
+            if not parts:
+                raise ValueError("The ZIP file contains no readable text or source files")
+    except BadZipFile as exc:
+        raise ValueError("The ZIP file is invalid or corrupted") from exc
+    return "\n\n".join(parts).strip()
 
 
 def split_text(text: str) -> list[str]:
@@ -77,13 +119,15 @@ async def index_document(
 
 
 async def retrieve_context(
-    db: AsyncSession, ollama: OllamaService, user_id: object, query: str
+    db: AsyncSession, ollama: OllamaService, user_id: object, query: str, document_ids: list[UUID] | None = None
 ) -> list[tuple[DocumentChunk, KnowledgeDocument, float]]:
     settings = get_settings()
     if not settings.rag_enabled or not query.strip():
         return []
+    if document_ids == []:
+        return []
     has_documents = await db.scalar(
-        select(DocumentChunk.id).where(DocumentChunk.user_id == user_id).limit(1)
+        select(DocumentChunk.id).where(DocumentChunk.user_id == user_id, *( [DocumentChunk.document_id.in_(document_ids)] if document_ids is not None else [])).limit(1)
     )
     if has_documents is None:
         return []
@@ -92,7 +136,7 @@ async def retrieve_context(
     rows = await db.execute(
         select(DocumentChunk, KnowledgeDocument, distance)
         .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
-        .where(DocumentChunk.user_id == user_id)
+        .where(DocumentChunk.user_id == user_id, *( [DocumentChunk.document_id.in_(document_ids)] if document_ids is not None else []))
         .order_by(distance)
         .limit(settings.rag_top_k)
     )

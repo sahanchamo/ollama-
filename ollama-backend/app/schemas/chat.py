@@ -51,10 +51,15 @@ class SendMessageRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
 
 
+class MessageContentUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=100_000)
+
+
 class MessageResponse(BaseModel):
     id: UUID
     role: Literal["system", "user", "assistant"]
     content: str
+    images: list[str] = Field(default_factory=list)
     status: str
     created_at: datetime
 
