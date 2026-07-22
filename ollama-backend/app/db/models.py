@@ -151,6 +151,15 @@ class ModelAccess(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class AppSetting(Base):
+    """Small persisted global settings controlled by administrators."""
+
+    __tablename__ = "app_settings"
+    name: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value: Mapped[str] = mapped_column(String(120), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class UserModelAccess(Base):
     """Per-user override for a model hidden by the global policy."""
 

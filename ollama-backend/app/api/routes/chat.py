@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import ChatAudit, UsageEvent
+from app.db.models import AppSetting, ChatAudit, UsageEvent
 from app.schemas.chat import ChatMessage, ChatRequest, GuestChatRequest
 from app.services.rate_limit import limit_request
 from app.services.quota import enforce_quota
@@ -89,6 +89,8 @@ async def models(request: Request, user: CurrentUser, db: DbSession, _: None = D
             item for item in response.get("models", [])
             if await model_allowed_for_user(db, user, item.get("name", ""))
         ]
+        hide_picker = await db.get(AppSetting, "hide_model_picker_for_users")
+        response["hide_model_picker"] = bool(hide_picker and hide_picker.value == "true" and not user.is_admin)
         return response
     except httpx.HTTPError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc

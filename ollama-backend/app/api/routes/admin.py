@@ -7,10 +7,10 @@ from sqlalchemy import delete, func, select, update
 
 from app.api.deps import AdminUser, DbSession, ROLE_PERMISSIONS, require_permission, roles_for_user
 from app.core.security import create_api_key, hash_password
-from app.db.models import ApiKey, ModelAccess, UsageEvent, User, UserModelAccess, UserQuota, UserRole
+from app.db.models import ApiKey, AppSetting, ModelAccess, UsageEvent, User, UserModelAccess, UserQuota, UserRole
 from app.schemas.admin import (
     AdminAnalytics, AdminApiKeyCreate, AdminDailyUsage, AdminModelUsage, AdminOverview, AdminRecentUsage,
-    AdminModelAccess, AdminModelAccessUpdate, AdminPasswordReset, AdminQuotaUpdate, AdminRoleUpdate, AdminUserCreate, AdminUserModelAccess, AdminUserModelAccessUpdate, AdminUserQuota, AdminUserRoles, AdminUserUpdate, AdminUserUsage, ApiKeyCreated, ApiKeyResponse,
+    AdminModelAccess, AdminModelAccessUpdate, AdminPasswordReset, AdminQuotaUpdate, AdminRoleUpdate, AdminUserCreate, AdminUserModelAccess, AdminUserModelAccessUpdate, AdminUserQuota, AdminUserRoles, AdminUserUpdate, AdminUserUsage, AdminWorkspaceSettings, ApiKeyCreated, ApiKeyResponse,
 )
 from app.services.quota import monthly_tokens
 
@@ -18,6 +18,23 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 AnalyticsPrincipal = Annotated[User, Depends(require_permission("analytics.read"))]
 KeyManager = Annotated[User, Depends(require_permission("keys.manage"))]
 UserManager = Annotated[User, Depends(require_permission("users.manage"))]
+
+
+@router.get("/settings", response_model=AdminWorkspaceSettings)
+async def get_workspace_settings(_: AdminUser, db: DbSession) -> AdminWorkspaceSettings:
+    setting = await db.get(AppSetting, "hide_model_picker_for_users")
+    return AdminWorkspaceSettings(hide_model_picker_for_users=setting is not None and setting.value == "true")
+
+
+@router.put("/settings", response_model=AdminWorkspaceSettings)
+async def set_workspace_settings(payload: AdminWorkspaceSettings, _: AdminUser, db: DbSession) -> AdminWorkspaceSettings:
+    setting = await db.get(AppSetting, "hide_model_picker_for_users")
+    if setting is None:
+        db.add(AppSetting(name="hide_model_picker_for_users", value=str(payload.hide_model_picker_for_users).lower()))
+    else:
+        setting.value = str(payload.hide_model_picker_for_users).lower()
+    await db.commit()
+    return payload
 
 
 async def user_usage_rows(db: DbSession) -> list[AdminUserUsage]:

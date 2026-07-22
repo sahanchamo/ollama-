@@ -129,6 +129,10 @@ class AdminModelAccessUpdate(BaseModel):
     enabled: bool
 
 
+class AdminWorkspaceSettings(BaseModel):
+    hide_model_picker_for_users: bool = False
+
+
 class AdminUserModelAccess(BaseModel):
     model: str
     enabled: bool

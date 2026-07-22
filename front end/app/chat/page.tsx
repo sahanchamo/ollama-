@@ -55,6 +55,7 @@ export default function ChatWorkspace() {
   const [token, setToken] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [models, setModels] = useState<Model[]>([]);
+  const [hideModelPicker, setHideModelPicker] = useState(false);
   const [model, setModel] = useState("qwen3:4b");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [active, setActive] = useState<Detail | null>(null);
@@ -137,6 +138,7 @@ export default function ChatWorkspace() {
 
   async function loadModels() {
     const data = await api("/chat/models");
+    setHideModelPicker(Boolean(data.hide_model_picker));
     const chatModels = (data.models || []).filter((item: Model) => !/(embed|embedding)/i.test(item.name));
     setModels(chatModels);
     if (chatModels.length) {
@@ -380,9 +382,10 @@ export default function ChatWorkspace() {
       <section className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center gap-3 px-3 sm:px-5">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="rounded-lg p-2 text-slate-300 hover:bg-white/10">☰</button>
-          <div className="model-picker"><span>Model</span><select value={selectedModel} onChange={(event) => void changeModel(event.target.value)} aria-label="Select AI model" disabled={!models.length}>
+          {!hideModelPicker && <div className="model-picker"><span>Model</span><select value={selectedModel} onChange={(event) => void changeModel(event.target.value)} aria-label="Select AI model" disabled={!models.length}>
             {models.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
           </select><button type="button" onClick={() => void loadModels()} title="Refresh installed models" aria-label="Refresh models">↻</button></div>
+          }
           <button onClick={() => setMemoriesOpen(true)} className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10">Memory</button>
           {active && <div className="ml-auto flex gap-1"><button onClick={renameConversation} className="rounded-lg px-3 py-1.5 text-sm hover:bg-white/10">Rename</button><button onClick={deleteConversation} className="rounded-lg px-3 py-1.5 text-sm text-rose-200 hover:bg-white/10">Delete</button></div>}
         </header>
