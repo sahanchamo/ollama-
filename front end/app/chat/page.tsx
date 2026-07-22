@@ -75,6 +75,7 @@ export default function ChatWorkspace() {
   const [alternatives, setAlternatives] = useState<Record<string, string>>({});
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);
   const [responseLanguage, setResponseLanguage] = useState("");
+  const [webResearch, setWebResearch] = useState(false);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
 
@@ -328,7 +329,7 @@ export default function ChatWorkspace() {
       setActive((current) => current ? { ...current, messages: [...current.messages, { id: userMessageId, role: "user", content, images, status: "complete", created_at: new Date().toISOString() }, temporary] } : current);
 
       const activeSkills = JSON.parse(localStorage.getItem("starlen_active_skill_sets") || "[]");
-      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images, skill_set_ids: Array.isArray(activeSkills) ? activeSkills.slice(0, 5) : [] }) });
+      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images, skill_set_ids: Array.isArray(activeSkills) ? activeSkills.slice(0, 5) : [], use_web: webResearch }) });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.detail || "Message failed");
@@ -464,6 +465,7 @@ export default function ChatWorkspace() {
           <div className="mx-auto max-w-3xl">
             <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void addScreenshot(file); event.currentTarget.value = ""; }} />
             <input ref={documentInput} type="file" multiple className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />
+            <div className="mb-2 flex justify-end"><button type="button" onClick={() => setWebResearch((enabled) => !enabled)} disabled={busy} aria-pressed={webResearch} title="Search the internet and cite sources" className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${webResearch ? "border-sky-300/50 bg-sky-300/15 text-sky-100" : "border-white/10 text-slate-400 hover:bg-white/5"}`}>{webResearch ? "Web research on" : "Web research"}</button></div>
             {/* Folder input uses Chromium's directory picker, supported by VS Code/Chrome-based browsers. */}
             {/* @ts-expect-error webkitdirectory is a browser-specific input attribute. */}
             <input ref={folderInput} type="file" multiple webkitdirectory="" className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />

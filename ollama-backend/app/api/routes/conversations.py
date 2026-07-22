@@ -32,6 +32,7 @@ from app.services.domain_lookup import live_domain_context
 from app.services.ollama import GenerationBusyError
 from app.services.model_access import model_allowed_for_user
 from app.services.language import response_language_instruction
+from app.services.web_search import search_web, web_search_instruction
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -353,7 +354,11 @@ async def send_message(
     language_instruction = response_language_instruction(user.response_language)
     tool_instruction = await live_domain_context(payload.content)
     skill_instruction = await selected_skill_instruction(db, user, payload.skill_set_ids)
-    system_context = "\n\n".join(item for item in (language_instruction, saved_memory, skill_instruction, rag_instruction, tool_instruction) if item)
+    try:
+        web_instruction = web_search_instruction(await search_web(payload.content)) if payload.use_web else None
+    except (RuntimeError, httpx.HTTPError) as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Web research unavailable: {exc}") from exc
+    system_context = "\n\n".join(item for item in (language_instruction, saved_memory, skill_instruction, rag_instruction, tool_instruction, web_instruction) if item)
     if system_context:
         messages.insert(0, ChatMessage(role="system", content=system_context))
     ollama_request = ChatRequest(
