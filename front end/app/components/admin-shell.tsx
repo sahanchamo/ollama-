@@ -11,7 +11,6 @@ const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/api-keys", label: "API access", icon: "key" },
   { href: "/analytics", label: "Usage & limits", icon: "chart" },
   { href: "/admin/settings", label: "Settings", icon: "settings" },
-  { href: "/skills", label: "Skill sets", icon: "book" },
   { href: "/admin/reset-password", label: "Password reset", icon: "lock" },
 ];
 

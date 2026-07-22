@@ -49,7 +49,6 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1)
     images: list[str] = Field(default_factory=list, max_length=4)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    skill_set_ids: list[UUID] = Field(default_factory=list, max_length=5)
 
 
 class MessageContentUpdate(BaseModel):

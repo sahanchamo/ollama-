@@ -11,7 +11,6 @@ type Conversation = { id: string; title: string; model: string; updated_at: stri
 type Message = { id: string; role: "user" | "assistant" | "system"; content: string; status: string; created_at: string; images?: string[] };
 type Detail = Conversation & { messages: Message[] };
 type Memory = { id: string; content: string; created_at: string };
-type SkillSet = { id: string; name: string; enabled: boolean };
 type BrowserSpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
@@ -76,8 +75,6 @@ export default function ChatWorkspace() {
   const [alternatives, setAlternatives] = useState<Record<string, string>>({});
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);
   const [responseLanguage, setResponseLanguage] = useState("");
-  const [skills, setSkills] = useState<SkillSet[]>([]);
-  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
 
@@ -330,7 +327,7 @@ export default function ChatWorkspace() {
       const temporary: Message = { id: assistantMessageId, role: "assistant", content: "", status: "streaming", created_at: new Date().toISOString() };
       setActive((current) => current ? { ...current, messages: [...current.messages, { id: userMessageId, role: "user", content, images, status: "complete", created_at: new Date().toISOString() }, temporary] } : current);
 
-      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images, skill_set_ids: selectedSkillIds }) });
+      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images }) });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.detail || "Message failed");
@@ -369,8 +366,8 @@ export default function ChatWorkspace() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([loadModels(), loadConversations(), loadMemories(), api("/account/preferences"), api("/skills")])
-      .then(([, , , preferences, nextSkills]) => { setResponseLanguage(preferences?.response_language || ""); setSkills(nextSkills.filter((skill: SkillSet) => skill.enabled)); })
+    Promise.all([loadModels(), loadConversations(), loadMemories(), api("/account/preferences")])
+      .then(([, , , preferences]) => setResponseLanguage(preferences?.response_language || ""))
       .catch((error) => setNotice((error as Error).message));
   }, [token]);
 
@@ -433,10 +430,6 @@ export default function ChatWorkspace() {
           </select><button type="button" onClick={() => void loadModels()} title="Refresh installed models" aria-label="Refresh models">↻</button></div>
           }
           <button onClick={() => setMemoriesOpen(true)} className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10">Memory</button>
-          <select multiple value={selectedSkillIds} onChange={(event) => setSelectedSkillIds(Array.from(event.currentTarget.selectedOptions, (option) => option.value))} aria-label="Active skill sets" className="max-w-40 rounded-lg border border-white/10 bg-[#2a2a2a] px-2 py-1.5 text-xs text-slate-200" title="Hold Ctrl/Cmd to select skill sets">
-            {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
-          </select>
-          <Link href="/skills" className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10">Skills</Link>
           {active && <div className="ml-auto flex gap-1"><button onClick={renameConversation} className="rounded-lg px-3 py-1.5 text-sm hover:bg-white/10">Rename</button><button onClick={deleteConversation} className="rounded-lg px-3 py-1.5 text-sm text-rose-200 hover:bg-white/10">Delete</button></div>}
         </header>
 
