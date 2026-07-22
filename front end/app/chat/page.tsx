@@ -327,7 +327,8 @@ export default function ChatWorkspace() {
       const temporary: Message = { id: assistantMessageId, role: "assistant", content: "", status: "streaming", created_at: new Date().toISOString() };
       setActive((current) => current ? { ...current, messages: [...current.messages, { id: userMessageId, role: "user", content, images, status: "complete", created_at: new Date().toISOString() }, temporary] } : current);
 
-      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images }) });
+      const activeSkills = JSON.parse(localStorage.getItem("starlen_active_skill_sets") || "[]");
+      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images, skill_set_ids: Array.isArray(activeSkills) ? activeSkills.slice(0, 5) : [] }) });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.detail || "Message failed");

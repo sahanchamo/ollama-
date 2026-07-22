@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 type User = { email: string; is_admin: boolean };
 type Usage = { total_tokens: number; request_count: number; monthly_token_limit: number | null; monthly_tokens_used: number; remaining_tokens: number | null };
 type ApiKey = { id: string; name: string; key_prefix: string; expires_at: string | null; revoked_at: string | null; last_used_at: string | null; created_at: string };
+type SkillSet = { id: string; name: string; description: string | null; instructions: string; enabled: boolean; admin_only: boolean };
 
 const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "/api/gateway").replace(/\/$/, "");
 const number = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
@@ -33,6 +34,11 @@ export default function SettingsPage() {
   const [responseLanguage, setResponseLanguage] = useState("");
   const [notice, setNotice] = useState("Loading settings...");
   const [activeTab, setActiveTab] = useState<"settings" | "docs">("settings");
+  const [skills, setSkills] = useState<SkillSet[]>([]);
+  const [activeSkills, setActiveSkills] = useState<string[]>([]);
+  const [skillName, setSkillName] = useState("");
+  const [skillInstructions, setSkillInstructions] = useState("");
+  const [adminOnlySkill, setAdminOnlySkill] = useState(false);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
   async function api(path: string, init: RequestInit = {}) {
@@ -42,7 +48,7 @@ export default function SettingsPage() {
     return body;
   }
   async function load() {
-    try { const [nextUsage, nextKeys, preferences] = await Promise.all([api("/usage/me"), api("/account/api-keys"), api("/account/preferences")]); setUsage(nextUsage); setKeys(nextKeys); setResponseLanguage(preferences.response_language || ""); setNotice("Settings loaded."); }
+    try { const [nextUsage, nextKeys, preferences, nextSkills] = await Promise.all([api("/usage/me"), api("/account/api-keys"), api("/account/preferences"), api("/skills")]); setUsage(nextUsage); setKeys(nextKeys); setResponseLanguage(preferences.response_language || ""); setSkills(nextSkills); setActiveSkills(JSON.parse(localStorage.getItem("starlen_active_skill_sets") || "[]")); setNotice("Settings loaded."); }
     catch (error) { setNotice(`Could not load settings: ${(error as Error).message}`); }
   }
   async function saveLanguage() {
@@ -65,6 +71,11 @@ export default function SettingsPage() {
     try { await api("/conversations", { method: "DELETE" }); setNotice("All of your chats were deleted."); }
     catch (error) { setNotice((error as Error).message); }
   }
+  async function createSkill() {
+    try { await api("/skills", { method: "POST", body: JSON.stringify({ name: skillName, instructions: skillInstructions, is_published: adminOnlySkill, admin_only: adminOnlySkill }) }); setSkillName(""); setSkillInstructions(""); setAdminOnlySkill(false); await load(); setNotice("Skill set created."); }
+    catch (error) { setNotice((error as Error).message); }
+  }
+  function toggleSkill(id: string) { const next = activeSkills.includes(id) ? activeSkills.filter((item) => item !== id) : [...activeSkills, id].slice(0, 5); setActiveSkills(next); localStorage.setItem("starlen_active_skill_sets", JSON.stringify(next)); }
   useEffect(() => {
     const saved = sessionStorage.getItem("ollama_gateway_token");
     if (!saved) { router.replace("/login"); return; }
@@ -80,6 +91,7 @@ export default function SettingsPage() {
   <section className="mt-6 grid gap-5 md:grid-cols-2"><article className="rounded-2xl border border-white/10 bg-[#2a2a2a] p-5"><h2 className="font-semibold">Token usage</h2><div className="mt-4 grid grid-cols-2 gap-3"><Stat label="Total tokens" value={number.format(usage?.total_tokens || 0)} /><Stat label="Requests" value={(usage?.request_count || 0).toLocaleString()} /></div><div className="mt-5"><div className="flex justify-between text-sm"><span>Monthly quota</span><span>{usage?.monthly_token_limit ? `${number.format(usage.monthly_tokens_used)} / ${number.format(usage.monthly_token_limit)}` : "Unlimited"}</span></div>{usage?.monthly_token_limit && <><div className="mt-2 h-2 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${percent}%` }} /></div><p className="mt-2 text-xs text-slate-400">{number.format(usage.remaining_tokens || 0)} tokens remaining this month</p></>}</div></article>
   <article className="rounded-2xl border border-white/10 bg-[#2a2a2a] p-5"><h2 className="font-semibold">Reply language</h2><p className="mt-1 text-sm text-slate-400">Use this language for future AI replies. You can still ask for a different language in one message.</p><select value={responseLanguage} onChange={(event) => setResponseLanguage(event.target.value)} className="mt-5 w-full rounded-xl border border-white/10 bg-black/20 p-3 outline-none"><option value="">Automatic — match my message</option><option>English</option><option>Sinhala</option><option>Tamil</option><option>Arabic</option><option>Chinese</option><option>French</option><option>German</option><option>Hindi</option><option>Japanese</option><option>Korean</option><option>Spanish</option></select><button onClick={() => void saveLanguage()} className="mt-3 w-full rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-medium text-sky-100 hover:bg-sky-400/20">Save reply language</button></article>
   <article className="rounded-2xl border border-white/10 bg-[#2a2a2a] p-5"><h2 className="font-semibold">Personal API keys</h2><p className="mt-1 text-sm text-slate-400">Use keys only in private backend services, never browser code.</p><label className="mt-4 block text-sm">Key name<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 p-2.5 outline-none" /></label><label className="mt-3 block text-sm">Expiry<select value={expiry} onChange={(event) => setExpiry(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 p-2.5 outline-none"><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option><option value="0">Never</option></select></label><button onClick={() => void createKey()} disabled={!name.trim()} className="mt-4 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black disabled:bg-slate-600">Create personal API key</button>{newKey && <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3"><p className="text-xs text-amber-200">Copy this key now. It will not be shown again.</p><code className="mt-2 block break-all text-xs text-amber-100">{newKey}</code></div>}</article></section>
+  <article className="rounded-2xl border border-white/10 bg-[#2a2a2a] p-5"><h2 className="font-semibold">Skill sets</h2><p className="mt-1 text-sm text-slate-400">Create reusable AI instructions and activate up to five for your chats.</p><input value={skillName} onChange={(event) => setSkillName(event.target.value)} placeholder="Skill name" className="mt-4 w-full rounded-lg border border-white/10 bg-black/20 p-2.5 outline-none" /><textarea value={skillInstructions} onChange={(event) => setSkillInstructions(event.target.value)} placeholder="Instructions for the AI" className="mt-3 min-h-24 w-full rounded-lg border border-white/10 bg-black/20 p-2.5 outline-none" />{user.is_admin && <label className="mt-3 flex items-center gap-2 text-xs text-amber-200"><input type="checkbox" checked={adminOnlySkill} onChange={(event) => setAdminOnlySkill(event.target.checked)} /> Administrator-only shared skill</label>}<button onClick={() => void createSkill()} disabled={!skillName.trim() || !skillInstructions.trim()} className="mt-3 w-full rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-medium text-sky-100 disabled:opacity-50">Create skill set</button><div className="mt-4 space-y-2">{skills.filter((skill) => skill.enabled).map((skill) => <label key={skill.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-black/20 p-2.5 text-sm"><input type="checkbox" checked={activeSkills.includes(skill.id)} onChange={() => toggleSkill(skill.id)} /><span>{skill.name}{skill.admin_only ? " · Admin only" : ""}</span></label>)}{!skills.length && <p className="text-xs text-slate-500">No skill sets yet.</p>}</div></article></section>
   <section className="mt-6 rounded-2xl border border-white/10 bg-[#2a2a2a] p-5"><h2 className="font-semibold">Your API keys</h2><div className="mt-4 space-y-2">{keys.map((key) => <div key={key.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-black/20 p-3 text-sm"><div className="min-w-0 flex-1"><p>{key.name}</p><code className="text-xs text-slate-400">{key.key_prefix}...</code></div><span className="text-xs text-slate-400">{key.revoked_at ? "Revoked" : key.expires_at ? `Expires ${new Date(key.expires_at).toLocaleDateString()}` : "No expiry"}</span>{!key.revoked_at && <button onClick={() => void revokeKey(key.id)} className="text-xs text-rose-300">Revoke</button>}</div>)}{!keys.length && <p className="text-sm text-slate-400">No personal API keys yet.</p>}</div></section>
   <section className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-950/15 p-5"><h2 className="font-semibold text-rose-200">Danger zone</h2><p className="mt-1 text-sm text-slate-400">Delete all conversations and messages in your account. Your documents and long-term memory are not affected.</p><button onClick={() => void clearChats()} className="mt-4 rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-medium text-white">Clear all my chats</button></section>
   </>}

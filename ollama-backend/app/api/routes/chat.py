@@ -91,7 +91,9 @@ async def models(request: Request, user: CurrentUser, db: DbSession, _: None = D
             if await model_allowed_for_user(db, user, item.get("name", ""))
         ]
         hide_picker = await db.get(AppSetting, "hide_model_picker_for_users")
-        response["hide_model_picker"] = bool(hide_picker and hide_picker.value == "true" and not user.is_admin)
+        # This is a workspace-wide UI policy. Administrators manage it from the
+        # admin console, but their own chat view must respect it as well.
+        response["hide_model_picker"] = bool(hide_picker and hide_picker.value == "true")
         return response
     except httpx.HTTPError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc
