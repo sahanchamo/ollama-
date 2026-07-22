@@ -1,0 +1,33 @@
+{
+  "name": "starlen-coding-assistant",
+  "displayName": "Starlen Coding Assistant",
+  "description": "A workspace-aware Starlen assistant with controlled local command execution.",
+  "version": "0.1.0",
+  "publisher": "starlen",
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onCommand:starlen.ask", "onCommand:starlen.configureToken", "onCommand:starlen.explainSelection"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "starlen.ask", "title": "Starlen: Ask Coding Assistant" },
+      { "command": "starlen.explainSelection", "title": "Starlen: Explain Selection" },
+      { "command": "starlen.configureToken", "title": "Starlen: Set API Token" }
+    ],
+    "configuration": {
+      "title": "Starlen Coding Assistant",
+      "properties": {
+        "starlen.apiBaseUrl": { "type": "string", "default": "https://ai.starlen.online/api/v1", "description": "Starlen Gateway API base URL." },
+        "starlen.model": { "type": "string", "default": "qwen3:4b", "description": "Model to use for coding assistance." },
+        "starlen.commandExecutionMode": { "type": "string", "enum": ["ask", "allow"], "default": "ask", "description": "ask requires approval for each agent command. allow executes commands only in this trusted VS Code workspace." },
+        "starlen.maxContextCharacters": { "type": "number", "default": 12000, "minimum": 1000, "maximum": 50000, "description": "Maximum active-editor context sent with a request." }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": { "@types/node": "^22.0.0", "@types/vscode": "^1.95.0", "typescript": "^5.7.0", "@vscode/vsce": "^3.2.0" }
+}
