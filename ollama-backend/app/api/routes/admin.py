@@ -7,10 +7,10 @@ from sqlalchemy import delete, func, select, update
 
 from app.api.deps import AdminUser, DbSession, ROLE_PERMISSIONS, require_permission, roles_for_user
 from app.core.security import create_api_key, hash_password
-from app.db.models import ApiKey, ModelAccess, UsageEvent, User, UserQuota, UserRole
+from app.db.models import ApiKey, ModelAccess, UsageEvent, User, UserModelAccess, UserQuota, UserRole
 from app.schemas.admin import (
     AdminAnalytics, AdminApiKeyCreate, AdminDailyUsage, AdminModelUsage, AdminOverview, AdminRecentUsage,
-    AdminModelAccess, AdminModelAccessUpdate, AdminPasswordReset, AdminQuotaUpdate, AdminRoleUpdate, AdminUserCreate, AdminUserQuota, AdminUserRoles, AdminUserUpdate, AdminUserUsage, ApiKeyCreated, ApiKeyResponse,
+    AdminModelAccess, AdminModelAccessUpdate, AdminPasswordReset, AdminQuotaUpdate, AdminRoleUpdate, AdminUserCreate, AdminUserModelAccess, AdminUserModelAccessUpdate, AdminUserQuota, AdminUserRoles, AdminUserUpdate, AdminUserUsage, ApiKeyCreated, ApiKeyResponse,
 )
 from app.services.quota import monthly_tokens
 
@@ -137,6 +137,45 @@ async def set_model_access(model_name: str, payload: AdminModelAccessUpdate, _: 
         access.enabled = payload.enabled
     await db.commit()
     return AdminModelAccess(model=model_name, enabled=payload.enabled)
+
+
+@router.get("/users/{user_id}/models", response_model=list[AdminUserModelAccess])
+async def list_user_model_access(user_id: UUID, request: Request, _: UserManager, db: DbSession) -> list[AdminUserModelAccess]:
+    if await db.get(User, user_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    try:
+        installed = (await request.app.state.ollama.list_models()).get("models", [])
+    except Exception as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc
+    global_policy = {entry.model: entry.enabled for entry in await db.scalars(select(ModelAccess))}
+    overrides = {
+        entry.model: entry.enabled
+        for entry in await db.scalars(select(UserModelAccess).where(UserModelAccess.user_id == user_id))
+    }
+    return [
+        AdminUserModelAccess(
+            model=item["name"],
+            enabled=overrides.get(item["name"], global_policy.get(item["name"], True)),
+            inherited=item["name"] not in overrides,
+        )
+        for item in installed
+    ]
+
+
+@router.put("/users/{user_id}/models/{model_name}", response_model=AdminUserModelAccess)
+async def set_user_model_access(
+    user_id: UUID, model_name: str, payload: AdminUserModelAccessUpdate, _: UserManager, db: DbSession
+) -> AdminUserModelAccess:
+    if await db.get(User, user_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    override = await db.get(UserModelAccess, {"user_id": user_id, "model": model_name})
+    if override is None:
+        override = UserModelAccess(user_id=user_id, model=model_name, enabled=payload.enabled)
+        db.add(override)
+    else:
+        override.enabled = payload.enabled
+    await db.commit()
+    return AdminUserModelAccess(model=model_name, enabled=payload.enabled, inherited=False)
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserUsage)

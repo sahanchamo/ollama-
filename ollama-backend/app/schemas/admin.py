@@ -127,3 +127,13 @@ class AdminModelAccess(BaseModel):
 
 class AdminModelAccessUpdate(BaseModel):
     enabled: bool
+
+
+class AdminUserModelAccess(BaseModel):
+    model: str
+    enabled: bool
+    inherited: bool
+
+
+class AdminUserModelAccessUpdate(BaseModel):
+    enabled: bool

@@ -7,21 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import ChatAudit, ModelAccess, UsageEvent
+from app.db.models import ChatAudit, UsageEvent
 from app.schemas.chat import ChatMessage, ChatRequest, GuestChatRequest
 from app.services.rate_limit import limit_request
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
+from app.services.model_access import model_allowed_for_user, model_enabled_for_guests
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = structlog.get_logger()
 GUEST_MESSAGE_LIMIT = 10
 
 
-async def assert_model_available(db: DbSession, model: str, is_admin: bool = False) -> None:
-    access = await db.get(ModelAccess, model)
-    if access is not None and not access.enabled and not is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This model is disabled by the administrator")
+async def assert_model_available(db: DbSession, model: str, user=None) -> None:
+    allowed = await model_enabled_for_guests(db, model) if user is None else await model_allowed_for_user(db, user, model)
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This model is not assigned to your account")
 
 
 def prompt_size(payload: ChatRequest) -> int:
@@ -84,10 +85,10 @@ async def guest_chat(payload: GuestChatRequest, request: Request, db: DbSession)
 async def models(request: Request, user: CurrentUser, db: DbSession, _: None = Depends(limit_request)) -> dict:
     try:
         response = await request.app.state.ollama.list_models()
-        if user.is_admin:
-            return response
-        disabled = set(await db.scalars(select(ModelAccess.model).where(ModelAccess.enabled.is_(False))))
-        response["models"] = [item for item in response.get("models", []) if item.get("name") not in disabled]
+        response["models"] = [
+            item for item in response.get("models", [])
+            if await model_allowed_for_user(db, user, item.get("name", ""))
+        ]
         return response
     except httpx.HTTPError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model service unavailable") from exc
@@ -103,7 +104,7 @@ async def chat(
 ):
     if prompt_size(payload) > get_settings().max_prompt_chars:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Prompt exceeds configured limit")
-    await assert_model_available(db, payload.model, user.is_admin)
+    await assert_model_available(db, payload.model, user)
     await enforce_quota(db, user.id)
     latest_user_message = next((message.content for message in reversed(payload.messages) if message.role == "user"), "")
     tool_instruction = await live_domain_context(latest_user_message)

@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
-:root { color-scheme: dark; }
+:root { color-scheme: dark; --ink: #eaf0ff; --muted: #91a0bd; --panel: rgba(13, 22, 42, .76); --line: rgba(148, 163, 184, .16); --accent: #8b5cf6; }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: #212121;
-  color: #ececec;
+  background: #070b16;
+  color: var(--ink);
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -14,6 +14,31 @@ button, input, textarea, select { font: inherit; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 button { -webkit-tap-highlight-color: transparent; }
 textarea { field-sizing: content; }
+::selection { background: rgba(139, 92, 246, .45); color: white; }
+
+/* Premium control-room and workspace surfaces. */
+.admin-shell { position: relative; isolation: isolate; background: radial-gradient(circle at 12% -8%, rgba(56, 189, 248, .15), transparent 30rem), radial-gradient(circle at 92% 0%, rgba(124, 58, 237, .18), transparent 28rem), #070b16; }
+.admin-shell::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .24; background-image: linear-gradient(rgba(148,163,184,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.08) 1px, transparent 1px); background-size: 46px 46px; mask-image: linear-gradient(to bottom, black, transparent 70%); }
+.admin-shell > div { position: relative; }
+.admin-shell header { border: 1px solid var(--line); border-radius: 1.5rem; padding: 1.35rem; background: linear-gradient(135deg, rgba(20, 31, 57, .92), rgba(10, 15, 31, .78)); box-shadow: 0 24px 60px rgba(0,0,0,.24); }
+.admin-shell nav { padding: .45rem; border: 1px solid var(--line); border-radius: 1rem; background: rgba(6, 10, 24, .62); backdrop-filter: blur(16px); }
+.admin-shell nav > * { border-radius: .7rem; }
+.admin-shell section, .admin-shell aside { box-shadow: 0 16px 38px rgba(0,0,0,.15); backdrop-filter: blur(12px); }
+.admin-shell input, .admin-shell select { transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+.admin-shell input:focus, .admin-shell select:focus { border-color: rgba(139, 92, 246, .8) !important; box-shadow: 0 0 0 3px rgba(139, 92, 246, .16); outline: none; }
+.admin-shell table tbody tr { transition: background .18s ease; }.admin-shell table tbody tr:hover { background: rgba(139, 92, 246, .07); }
+.workspace-shell { position: relative; background: radial-gradient(circle at 78% -12%, rgba(99, 102, 241, .16), transparent 28rem), radial-gradient(circle at 0% 100%, rgba(14, 165, 233, .10), transparent 25rem), #101522; }
+.workspace-shell::before { content: ""; pointer-events: none; position: absolute; inset: 0; opacity: .32; background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px); background-size: 34px 34px; mask-image: linear-gradient(to bottom, black, transparent 60%); }
+.workspace-shell > * { position: relative; }.workspace-shell aside { background: rgba(7, 11, 22, .78) !important; backdrop-filter: blur(18px); }.workspace-shell textarea { caret-color: #a78bfa; }
+
+/* Existing workspace markup gets the same surface treatment without changing its behavior. */
+main:has(> div > nav) { position: relative; isolation: isolate; background: radial-gradient(circle at 12% -8%, rgba(56,189,248,.15), transparent 30rem), radial-gradient(circle at 92% 0%, rgba(124,58,237,.18), transparent 28rem), #070b16; }
+main:has(> div > nav)::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.07) 1px, transparent 1px); background-size: 46px 46px; mask-image: linear-gradient(to bottom, black, transparent 72%); }
+main:has(> div > nav) > div > header { border: 1px solid var(--line); border-radius: 1.5rem; padding: 1.35rem; background: linear-gradient(135deg, rgba(20,31,57,.92), rgba(10,15,31,.78)); box-shadow: 0 24px 60px rgba(0,0,0,.24); }
+main:has(> div > nav) > div > nav { padding: .45rem; border: 1px solid var(--line); border-radius: 1rem; background: rgba(6,10,24,.62); backdrop-filter: blur(16px); }
+main:has(> div > nav) table tbody tr { transition: background .18s ease; } main:has(> div > nav) table tbody tr:hover { background: rgba(139,92,246,.07); }
+main:has(.model-picker) { position: relative; background: radial-gradient(circle at 78% -12%, rgba(99,102,241,.16), transparent 28rem), radial-gradient(circle at 0% 100%, rgba(14,165,233,.10), transparent 25rem), #101522 !important; }
+main:has(.model-picker) > aside { background: rgba(7,11,22,.80) !important; backdrop-filter: blur(18px); } main:has(.model-picker) textarea { caret-color: #a78bfa; }
 
 .login-scene { isolation: isolate; }
 .login-aurora { position: fixed; width: 44rem; height: 44rem; border-radius: 9999px; filter: blur(55px); opacity: .30; pointer-events: none; z-index: -1; animation: drift 11s ease-in-out infinite alternate; }

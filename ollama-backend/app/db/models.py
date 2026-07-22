@@ -149,3 +149,13 @@ class ModelAccess(Base):
     model: Mapped[str] = mapped_column(String(120), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class UserModelAccess(Base):
+    """Per-user override for a model hidden by the global policy."""
+
+    __tablename__ = "user_model_access"
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    model: Mapped[str] = mapped_column(String(120), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

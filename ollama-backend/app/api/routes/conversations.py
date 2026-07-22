@@ -11,7 +11,7 @@ from sqlalchemy import delete, desc, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import Conversation, Message, ModelAccess, UsageEvent, UserMemory
+from app.db.models import Conversation, Message, UsageEvent, UserMemory
 from app.db.session import SessionLocal
 from app.schemas.chat import (
     ChatMessage,
@@ -28,6 +28,7 @@ from app.services.rag import build_rag_instruction, retrieve_context
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
 from app.services.ollama import GenerationBusyError
+from app.services.model_access import model_allowed_for_user
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -83,10 +84,9 @@ async def owned_conversation(db: DbSession, conversation_id: UUID, user_id: UUID
     return conversation
 
 
-async def assert_model_available(db: DbSession, model: str, is_admin: bool) -> None:
-    access = await db.get(ModelAccess, model)
-    if access is not None and not access.enabled and not is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This model is disabled by the administrator")
+async def assert_model_available(db: DbSession, model: str, user) -> None:
+    if not await model_allowed_for_user(db, user, model):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This model is not assigned to your account")
 
 
 def recent_model_messages(previous: list[Message]) -> list[ChatMessage]:
@@ -118,7 +118,7 @@ async def clear_my_conversations(user: CurrentUser, db: DbSession) -> Response:
 
 @router.post("", response_model=ConversationSummary, status_code=status.HTTP_201_CREATED)
 async def create_conversation(payload: ConversationCreate, user: CurrentUser, db: DbSession) -> Conversation:
-    await assert_model_available(db, payload.model, user.is_admin)
+    await assert_model_available(db, payload.model, user)
     conversation = Conversation(user_id=user.id, model=payload.model, title=payload.title or "New chat")
     db.add(conversation)
     await db.commit()
@@ -153,7 +153,7 @@ async def update_conversation(
     if "title" in changes:
         conversation.title = changes["title"].strip()
     if "model" in changes:
-        await assert_model_available(db, changes["model"], user.is_admin)
+        await assert_model_available(db, changes["model"], user)
         conversation.model = changes["model"]
     await db.commit()
     await db.refresh(conversation)
@@ -241,7 +241,7 @@ async def send_message(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Message exceeds configured limit")
     await enforce_quota(db, user.id)
     conversation = await owned_conversation(db, conversation_id, user.id)
-    await assert_model_available(db, conversation.model, user.is_admin)
+    await assert_model_available(db, conversation.model, user)
     images = validate_images(payload.images)
     # Qwen 3.5 models are vision-capable even though their names do not use the
     # older `-vl` suffix (for example, qwen3.5:4b installed on the local GPU).
