@@ -25,6 +25,7 @@ from app.services.rate_limit import limit_request
 from app.services.rag import build_rag_instruction, retrieve_context
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
+from app.services.generation_slots import GenerationBusyError
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -155,9 +156,12 @@ async def persist_stream(
         # The frontend receives a final stream event instead of an opaque proxy failure.
         yield b'{"error":"Model service unavailable","done":true}\n'
     finally:
-        await persist_assistant_message(
-            conversation_id, user_id, ollama_request.model, "".join(answer), "complete" if completed else "interrupted", metrics
-        )
+        try:
+            await persist_assistant_message(
+                conversation_id, user_id, ollama_request.model, "".join(answer), "complete" if completed else "interrupted", metrics
+            )
+        finally:
+            request.app.state.generation_slots.release()
 
 
 @router.post("/{conversation_id}/messages", response_class=StreamingResponse)
@@ -172,37 +176,49 @@ async def send_message(
     if len(payload.content) > get_settings().max_prompt_chars:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Message exceeds configured limit")
     await enforce_quota(db, user.id)
-    conversation = await owned_conversation(db, conversation_id, user.id)
-    user_message = Message(conversation_id=conversation.id, role="user", content=payload.content)
-    db.add(user_message)
-    if conversation.title == "New chat":
-        conversation.title = chat_title(payload.content)
-    else:
-        conversation.updated_at = func.now()
-    await db.commit()
-
-    previous = await db.scalars(
-        select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at)
-    )
-    messages = [ChatMessage(role=message.role, content=message.content) for message in previous]
     try:
+        await request.app.state.generation_slots.acquire()
+    except GenerationBusyError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Model is busy. Please retry in a moment.",
+            headers={"Retry-After": str(int(get_settings().ollama_queue_wait_seconds) or 1)},
+        ) from exc
+    try:
+        conversation = await owned_conversation(db, conversation_id, user.id)
+        user_message = Message(conversation_id=conversation.id, role="user", content=payload.content)
+        db.add(user_message)
+        if conversation.title == "New chat":
+            conversation.title = chat_title(payload.content)
+        else:
+            conversation.updated_at = func.now()
+        await db.commit()
+
+        previous = await db.scalars(
+            select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at)
+        )
+        messages = [ChatMessage(role=message.role, content=message.content) for message in previous]
         context = await retrieve_context(db, request.app.state.ollama, user.id, payload.content)
+        rag_instruction = build_rag_instruction(context)
+        tool_instruction = await live_domain_context(payload.content)
+        system_context = "\n\n".join(item for item in (rag_instruction, tool_instruction) if item)
+        if system_context:
+            messages.insert(0, ChatMessage(role="system", content=system_context))
+        ollama_request = ChatRequest(
+            model=conversation.model, messages=messages, temperature=payload.temperature, stream=True
+        )
+        return StreamingResponse(
+            persist_stream(request, ollama_request, conversation.id, user.id),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "X-Conversation-ID": str(conversation.id),
+            },
+        )
     except (httpx.HTTPError, RuntimeError) as exc:
+        request.app.state.generation_slots.release()
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Knowledge retrieval unavailable: {exc}") from exc
-    rag_instruction = build_rag_instruction(context)
-    tool_instruction = await live_domain_context(payload.content)
-    system_context = "\n\n".join(item for item in (rag_instruction, tool_instruction) if item)
-    if system_context:
-        messages.insert(0, ChatMessage(role="system", content=system_context))
-    ollama_request = ChatRequest(
-        model=conversation.model, messages=messages, temperature=payload.temperature, stream=True
-    )
-    return StreamingResponse(
-        persist_stream(request, ollama_request, conversation.id, user.id),
-        media_type="application/x-ndjson",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "X-Conversation-ID": str(conversation.id),
-        },
-    )
+    except Exception:
+        request.app.state.generation_slots.release()
+        raise

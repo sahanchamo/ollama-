@@ -11,6 +11,7 @@ from app.schemas.chat import ChatMessage, ChatRequest
 from app.services.rate_limit import limit_request
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
+from app.services.generation_slots import GenerationBusyError
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = structlog.get_logger()
@@ -37,6 +38,14 @@ async def record_usage(db: AsyncSession, user_id: object, payload: ChatRequest, 
         )
     )
     await db.commit()
+
+
+async def stream_with_slot(request: Request, payload: ChatRequest):
+    try:
+        async for chunk in request.app.state.ollama.stream_chat(payload):
+            yield chunk
+    finally:
+        request.app.state.generation_slots.release()
 
 
 @router.get("/models")
@@ -68,19 +77,30 @@ async def chat(
             payload.messages.insert(0, ChatMessage(role="system", content=tool_instruction))
     try:
         if payload.stream:
+            await request.app.state.generation_slots.acquire()
             await audit(db, user.id, payload, "streaming")
             return StreamingResponse(
-                request.app.state.ollama.stream_chat(payload),
+                stream_with_slot(request, payload),
                 media_type="application/x-ndjson",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
-        response = await request.app.state.ollama.chat(payload)
+        await request.app.state.generation_slots.acquire()
+        try:
+            response = await request.app.state.ollama.chat(payload)
+        finally:
+            request.app.state.generation_slots.release()
         await audit(db, user.id, payload, "completed")
         await record_usage(db, user.id, payload, response)
         return response
     except httpx.TimeoutException as exc:
         await audit(db, user.id, payload, "timeout", "Ollama request timed out")
         raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT, "Model request timed out") from exc
+    except GenerationBusyError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Model is busy. Please retry in a moment.",
+            headers={"Retry-After": str(int(get_settings().ollama_queue_wait_seconds) or 1)},
+        ) from exc
     except httpx.HTTPError as exc:
         await audit(db, user.id, payload, "failed", str(exc)[:1000])
         log.warning("ollama_request_failed", user_id=str(user.id), model=payload.model)

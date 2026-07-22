@@ -16,6 +16,7 @@ from app.core.logging import configure_logging
 from app.db.models import Base, User
 from app.db.session import SessionLocal, engine
 from app.services.ollama import OllamaService
+from app.services.generation_slots import GenerationSlots
 from app.services.rate_limit import RateLimiter
 
 settings = get_settings()
@@ -28,6 +29,9 @@ async def lifespan(app: FastAPI):
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.rate_limiter = RateLimiter(app.state.redis)
     app.state.ollama = OllamaService()
+    app.state.generation_slots = GenerationSlots(
+        settings.ollama_max_concurrent_generations, settings.ollama_queue_wait_seconds
+    )
     app.state.session_factory = SessionLocal
     # Use Alembic migrations in mature deployments. This bootstrap creates the initial schema.
     async with engine.begin() as connection:

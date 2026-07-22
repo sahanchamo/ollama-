@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     redis_url: str
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_timeout_seconds: float = Field(default=180, ge=10, le=600)
+    ollama_max_concurrent_generations: int = Field(default=1, ge=1, le=8)
+    ollama_queue_wait_seconds: float = Field(default=15, ge=0, le=300)
     allowed_origins: list[AnyHttpUrl] = []
     rate_limit_per_minute: int = Field(default=30, ge=1, le=1000)
     max_prompt_chars: int = Field(default=20000, ge=100, le=200000)

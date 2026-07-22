@@ -15,8 +15,12 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: "60"
       DATABASE_URL: postgresql+asyncpg://ollama:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/ollama_gateway
       REDIS_URL: redis://redis:6379/0
-      OLLAMA_BASE_URL: http://ollama:11434
+      # Private address of Ollama on the user's PC, reachable through Tailscale.
+      # Never expose Ollama port 11434 publicly.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:?Set OLLAMA_BASE_URL to your PC's private Ollama URL}
       OLLAMA_TIMEOUT_SECONDS: "180"
+      OLLAMA_MAX_CONCURRENT_GENERATIONS: "1"
+      OLLAMA_QUEUE_WAIT_SECONDS: "15"
       ALLOWED_ORIGINS: '["http://localhost:3000"]'
       RATE_LIMIT_PER_MINUTE: "30"
       MAX_PROMPT_CHARS: "20000"
@@ -34,8 +38,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_started
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -64,13 +66,6 @@ services:
       timeout: 3s
       retries: 20
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-
 volumes:
   postgres_data:
   redis_data:
-  ollama_data:

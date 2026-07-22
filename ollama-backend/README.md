@@ -7,11 +7,11 @@ A secure Python/FastAPI gateway for a private Ollama service. The browser never 
 ## Architecture
 
 ```text
-Frontend -> HTTPS reverse proxy -> FastAPI (JWT, Redis limits, audit) -> Ollama
+Frontend -> HTTPS reverse proxy -> FastAPI (JWT, Redis limits, audit) -> Ollama on your PC
                                       |-> PostgreSQL
 ```
 
-Only Nginx publishes a port. PostgreSQL, Redis, Ollama, and FastAPI use the private Docker network.
+Only Nginx publishes a port. PostgreSQL, Redis, and FastAPI use the private Docker network. Ollama stays on the local PC and is reached from the VPS through a private network.
 
 ## Start on the VPS
 
@@ -25,7 +25,9 @@ Only Nginx publishes a port. PostgreSQL, Redis, Ollama, and FastAPI use the priv
    docker compose exec ollama ollama pull qwen2.5:3b
    ```
 
-3. Visit `http://YOUR_SERVER/docs`. Put TLS in front of Nginx (Caddy, Certbot, Cloudflare, or your VPS load balancer) before public use.
+3. Install Tailscale on both the VPS and the PC, and sign both devices into the same tailnet. On Windows, create a user environment variable `OLLAMA_HOST=0.0.0.0:11434`, quit Ollama from the taskbar, and start it again. Allow port 11434 only from the VPS in your Tailscale access policy/firewall; never create a public router or cloud firewall rule for that port. Set `OLLAMA_BASE_URL` to `http://YOUR_PC_TAILSCALE_IP:11434`.
+4. On the PC, pull and warm your chosen 7B model, then confirm its exact name with `ollama list`. Use that exact name when creating conversations in the app.
+5. Start the VPS stack with `docker compose up -d --build`, then visit `http://YOUR_SERVER/docs`. Put TLS in front of Nginx (Caddy, Certbot, Cloudflare, or your VPS load balancer) before public use.
 
 ## Frontend contract
 
@@ -113,4 +115,6 @@ X-API-Key: ogw_...
 - Set `ALLOWED_ORIGINS` to your exact frontend HTTPS origin.
 - Back up the PostgreSQL volume; model files are intentionally stored separately in `ollama_data`.
 - On 4 vCPU/16 GB RAM run one small Q3 model and keep context sizes conservative. The API rate limit is deliberately low by default.
+- For your 8 GB GPU and a 7B model, leave `OLLAMA_MAX_CONCURRENT_GENERATIONS=1`. Extra requests wait up to 15 seconds and then receive a retryable 503 instead of slowing every user down. Increase it only after load testing; two concurrent generations usually means slower replies for everyone.
+- On the PC, keep the model loaded and cap parallelism: set `OLLAMA_KEEP_ALIVE=30m` and `OLLAMA_NUM_PARALLEL=1` in the Ollama service environment, then restart Ollama. Use a Q4_K_M/Q4 quantized 7B model for the best balance on 8 GB VRAM.
 - For schema changes, replace the bootstrap `create_all` approach with Alembic migrations before carrying real user data. If you started the previous schema already, create the new `conversations` and `messages` tables through a migration before deploying this version.
