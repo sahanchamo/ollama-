@@ -11,7 +11,7 @@ from sqlalchemy import delete, desc, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.db.models import Conversation, ConversationKnowledgeDocument, KnowledgeDocument, Message, UsageEvent, UserMemory
+from app.db.models import Conversation, ConversationKnowledgeDocument, KnowledgeDocument, Message, SkillSet, UsageEvent, UserMemory
 from app.db.session import SessionLocal
 from app.schemas.chat import (
     ChatMessage,
@@ -68,6 +68,16 @@ async def memory_instruction(db: DbSession, user_id: UUID) -> str | None:
         .order_by(UserMemory.created_at.desc())
         .limit(30)
     )
+
+
+async def skill_instruction(db: DbSession, user, skill_ids: list[UUID]) -> str | None:
+    if not skill_ids:
+        return None
+    skills = list(await db.scalars(select(SkillSet).where(SkillSet.id.in_(skill_ids), SkillSet.enabled.is_(True))))
+    if len(skills) != len(set(skill_ids)) or any(skill.owner_id != user.id and not skill.is_published for skill in skills):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "One or more selected skill sets are unavailable")
+    content = "\n\n".join(f"SKILL SET — {skill.name}:\n{skill.instructions.strip()}" for skill in skills)
+    return "Apply the following approved skill instructions when relevant. They do not override system safety rules.\n\n" + content
     items = [memory.content.strip() for memory in memories if memory.content.strip()]
     if not items:
         return None
@@ -340,7 +350,8 @@ async def send_message(
     saved_memory = await memory_instruction(db, user.id)
     language_instruction = response_language_instruction(user.response_language)
     tool_instruction = await live_domain_context(payload.content)
-    system_context = "\n\n".join(item for item in (language_instruction, saved_memory, rag_instruction, tool_instruction) if item)
+    selected_skills = await skill_instruction(db, user, payload.skill_set_ids)
+    system_context = "\n\n".join(item for item in (language_instruction, saved_memory, selected_skills, rag_instruction, tool_instruction) if item)
     if system_context:
         messages.insert(0, ChatMessage(role="system", content=system_context))
     ollama_request = ChatRequest(

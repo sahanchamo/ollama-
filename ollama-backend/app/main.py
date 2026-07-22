@@ -10,11 +10,11 @@ from redis.asyncio import Redis
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.routes import account, admin, auth, chat, conversations, health, knowledge, memory, tools, usage
+from app.api.routes import account, admin, auth, chat, conversations, health, knowledge, memory, skills, tools, usage
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.security import hash_password
-from app.db.models import Base, User, UserRole
+from app.db.models import Base, SecurityTool, User, UserRole
 from app.db.session import SessionLocal, engine
 from app.services.ollama import OllamaService
 from app.services.rate_limit import RateLimiter
@@ -66,6 +66,14 @@ async def lifespan(app: FastAPI):
                 if role is None:
                     session.add(UserRole(user_id=user.id, role="admin"))
                 await session.commit()
+    async with SessionLocal() as session:
+        if not await session.scalar(select(SecurityTool.id).limit(1)):
+            session.add_all([
+                SecurityTool(name="Nmap", package="nmap", description="Authorized network discovery and service inventory."),
+                SecurityTool(name="Nikto", package="nikto", description="Authorized web-server configuration checks."),
+                SecurityTool(name="OWASP ZAP", package="zaproxy", description="Authorized web application security testing."),
+            ])
+            await session.commit()
     yield
     await app.state.ollama.close()
     await app.state.redis.aclose()
@@ -118,4 +126,5 @@ app.include_router(usage.router, prefix=settings.api_v1_prefix)
 app.include_router(knowledge.router, prefix=settings.api_v1_prefix)
 app.include_router(memory.router, prefix=settings.api_v1_prefix)
 app.include_router(tools.router, prefix=settings.api_v1_prefix)
+app.include_router(skills.router, prefix=settings.api_v1_prefix)
 app.include_router(admin.router, prefix=settings.api_v1_prefix)
