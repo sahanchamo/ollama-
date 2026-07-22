@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     rag_chunk_size: int = Field(default=1200, ge=200, le=5000)
     rag_chunk_overlap: int = Field(default=200, ge=0, le=1000)
     rag_max_upload_bytes: int = Field(default=10_485_760, ge=1024, le=104_857_600)
-    web_search_enabled: bool = False
-    tavily_api_key: str | None = None
+    web_search_enabled: bool = True
+    searxng_url: str = "http://searxng:8080"
     web_search_max_results: int = Field(default=5, ge=1, le=8)
     bootstrap_admin_email: str | None = None
     bootstrap_admin_password: str | None = Field(default=None, min_length=12)

@@ -13,30 +13,21 @@ class WebSource:
 
 
 async def search_web(query: str) -> list[WebSource]:
-    """Search through the configured provider; browser clients never receive the provider key."""
+    """Search the self-hosted SearXNG service; it is not exposed to browser clients."""
     settings = get_settings()
     if not settings.web_search_enabled:
         raise RuntimeError("Web search is disabled by the workspace administrator")
-    if not settings.tavily_api_key:
-        raise RuntimeError("Web search is not configured: set TAVILY_API_KEY on the server")
     async with httpx.AsyncClient(timeout=httpx.Timeout(20, connect=8)) as client:
-        response = await client.post(
-            "https://api.tavily.com/search",
-            headers={"Authorization": f"Bearer {settings.tavily_api_key}"},
-            json={
-                "query": query,
-                "search_depth": "basic",
-                "max_results": settings.web_search_max_results,
-                "include_answer": False,
-                "include_raw_content": "text",
-            },
+        response = await client.get(
+            f"{settings.searxng_url.rstrip('/')}/search",
+            params={"q": query, "format": "json", "language": "auto", "safesearch": 1},
         )
         response.raise_for_status()
     sources: list[WebSource] = []
-    for item in response.json().get("results", []):
+    for item in response.json().get("results", [])[:settings.web_search_max_results]:
         url = str(item.get("url", "")).strip()
         title = str(item.get("title", "Untitled source")).strip()
-        content = str(item.get("raw_content") or item.get("content") or "").strip()
+        content = str(item.get("content") or "").strip()
         if url and content:
             sources.append(WebSource(title=title[:240], url=url[:2048], content=content[:4000]))
     return sources
