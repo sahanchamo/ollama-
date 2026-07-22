@@ -13,6 +13,7 @@ from app.services.rate_limit import limit_request
 from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
 from app.services.model_access import model_allowed_for_user, model_enabled_for_guests
+from app.services.language import response_language_instruction
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = structlog.get_logger()
@@ -109,13 +110,15 @@ async def chat(
     await assert_model_available(db, payload.model, user)
     await enforce_quota(db, user.id)
     latest_user_message = next((message.content for message in reversed(payload.messages) if message.role == "user"), "")
+    language_instruction = response_language_instruction(user.response_language)
     tool_instruction = await live_domain_context(latest_user_message)
-    if tool_instruction:
+    system_context = "\n\n".join(item for item in (language_instruction, tool_instruction) if item)
+    if system_context:
         existing_system = next((message for message in payload.messages if message.role == "system"), None)
         if existing_system:
-            existing_system.content = f"{existing_system.content}\n\n{tool_instruction}"
+            existing_system.content = f"{existing_system.content}\n\n{system_context}"
         else:
-            payload.messages.insert(0, ChatMessage(role="system", content=tool_instruction))
+            payload.messages.insert(0, ChatMessage(role="system", content=system_context))
     try:
         if payload.stream:
             await audit(db, user.id, payload, "streaming")

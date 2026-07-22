@@ -74,6 +74,7 @@ export default function ChatWorkspace() {
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [alternatives, setAlternatives] = useState<Record<string, string>>({});
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);
+  const [responseLanguage, setResponseLanguage] = useState("");
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
 
@@ -103,7 +104,7 @@ export default function ChatWorkspace() {
     const instance = new SpeechRecognition();
     instance.continuous = false;
     instance.interimResults = true;
-    instance.lang = navigator.language || "en-US";
+    instance.lang = responseLanguage === "Sinhala" ? "si-LK" : navigator.language || "en-US";
     instance.onresult = (event) => {
       const transcript = Array.from(event.results, (result) => result[0].transcript).join("");
       setPrompt(transcript);
@@ -129,7 +130,7 @@ export default function ChatWorkspace() {
     }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(message.content.replace(/```[\\s\\S]*?```/g, "Code omitted."));
-    utterance.lang = navigator.language || "en-US";
+    utterance.lang = responseLanguage === "Sinhala" ? "si-LK" : navigator.language || "en-US";
     utterance.rate = 1;
     utterance.onend = () => setSpeakingMessageId(null);
     utterance.onerror = () => setSpeakingMessageId(null);
@@ -365,7 +366,9 @@ export default function ChatWorkspace() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([loadModels(), loadConversations(), loadMemories()]).catch((error) => setNotice((error as Error).message));
+    Promise.all([loadModels(), loadConversations(), loadMemories(), api("/account/preferences")])
+      .then(([, , , preferences]) => setResponseLanguage(preferences?.response_language || ""))
+      .catch((error) => setNotice((error as Error).message));
   }, [token]);
 
   useEffect(() => {
@@ -394,7 +397,7 @@ export default function ChatWorkspace() {
 
   return (
     <main className="flex h-dvh overflow-hidden bg-[#212121] text-[#ececec]" onDragOver={(event) => { if (Array.from(event.dataTransfer.types).includes("Files")) { event.preventDefault(); setDraggingImages(true); } }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingImages(false); }} onDrop={(event) => { event.preventDefault(); setDraggingImages(false); void addScreenshots(Array.from(event.dataTransfer.files)); }}>
-      <aside className={`${sidebarOpen ? "w-[280px]" : "w-0"} relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#171717] transition-all duration-200`}>
+      <aside className={`${sidebarOpen ? "w-[280px]" : "w-0"} relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#212121] transition-all duration-200`}>
         <div className="flex h-full w-[280px] flex-col p-2.5">
           <div className="flex items-center justify-between px-2 py-2">
             <span className="grid h-7 w-7 place-items-center rounded-full border border-white/30 text-sm">◉</span>
@@ -443,7 +446,7 @@ export default function ChatWorkspace() {
             )) : (
               <div className="pt-24 text-center sm:pt-32">
                 <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-[22px] shadow-2xl shadow-violet-950/50"><img src="/icon.svg" alt="Starlen" className="h-full w-full" /></div>
-                <p className="mt-4 bg-gradient-to-r from-sky-300 via-indigo-300 to-violet-300 bg-clip-text text-xs font-bold tracking-[.34em] text-transparent">STARLEN</p>
+                <p className="mt-4 text-xs font-bold tracking-[.34em] text-sky-300">STARLEN</p>
                 <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-[2.5rem]">How can I help you today?</h1>
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-400">Ask questions, work with your private documents, or explore ideas with your local model.</p>
                 <div className="mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-2">
@@ -456,7 +459,7 @@ export default function ChatWorkspace() {
           </div>
         </div>
 
-        <form onSubmit={send} className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent px-4 pb-5 pt-14">
+        <form onSubmit={send} className="absolute inset-x-0 bottom-0 bg-[#212121] px-4 pb-5 pt-5">
           <div className="mx-auto max-w-3xl">
             <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void addScreenshot(file); event.currentTarget.value = ""; }} />
             <input ref={documentInput} type="file" multiple className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />

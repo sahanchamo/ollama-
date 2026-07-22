@@ -31,6 +31,7 @@ from app.services.quota import enforce_quota
 from app.services.domain_lookup import live_domain_context
 from app.services.ollama import GenerationBusyError
 from app.services.model_access import model_allowed_for_user
+from app.services.language import response_language_instruction
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -182,6 +183,9 @@ async def regenerate_message(conversation_id: UUID, message_id: UUID, request: R
     if user_index is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "No user message is available to regenerate")
     messages = recent_model_messages(history[:user_index + 1])
+    language_instruction = response_language_instruction(user.response_language)
+    if language_instruction:
+        messages.insert(0, ChatMessage(role="system", content=language_instruction))
     response = await request.app.state.ollama.chat(ChatRequest(model=conversation.model, messages=messages, stream=False))
     content = response.get("message", {}).get("content", "").strip()
     if not content:
@@ -334,11 +338,7 @@ async def send_message(
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Knowledge retrieval unavailable: {exc}") from exc
     rag_instruction = build_rag_instruction(context)
     saved_memory = await memory_instruction(db, user.id)
-    language_instruction = (
-        f"Always reply in {user.response_language}. Use that language even if the user writes in another language, "
-        "unless they explicitly request a different language for this answer."
-        if user.response_language else None
-    )
+    language_instruction = response_language_instruction(user.response_language)
     tool_instruction = await live_domain_context(payload.content)
     system_context = "\n\n".join(item for item in (language_instruction, saved_memory, rag_instruction, tool_instruction) if item)
     if system_context:

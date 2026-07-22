@@ -34,12 +34,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   useEffect(() => { const saved = sessionStorage.getItem("ollama_gateway_user"); if (saved) setEmail(JSON.parse(saved).email || "Administrator"); }, []);
   const isCurrent = (href: string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
   const signOut = () => { sessionStorage.removeItem("ollama_gateway_token"); sessionStorage.removeItem("ollama_gateway_user"); router.replace("/login"); };
-  return <div className="admin-shell-layout min-h-screen bg-[#10131a] text-slate-100 md:pl-64">
-    <aside className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#151920]/95 px-2 py-2 backdrop-blur md:inset-y-0 md:left-0 md:right-auto md:w-64 md:border-r md:border-t-0 md:px-3 md:py-5">
-      <Link href="/" className="mb-8 hidden items-center gap-2.5 px-2 text-lg font-bold tracking-[-.04em] text-white md:flex"><img src="/icon.svg" alt="Starlen" className="size-8 rounded-lg" />starlen</Link>
-      <p className="mb-2 hidden px-2 text-[10px] font-bold uppercase tracking-[.13em] text-slate-500 md:block">Administration</p>
-      <nav className="mx-auto flex max-w-lg items-center justify-around gap-1 md:grid md:max-w-none md:justify-stretch">{links.map((link) => <Link key={link.href} href={link.href} title={link.label} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${isCurrent(link.href) ? "bg-[oklch(78.9%_0.154_211.53_/_0.16)] text-[oklch(86%_0.11_211.53)]" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"}`}><Icon name={link.icon} /><span className="hidden md:inline">{link.label}</span></Link>)}</nav>
-      <div className="mt-auto hidden border-t border-white/10 pt-4 md:block"><p className="truncate px-2 text-xs font-medium text-slate-300">{email}</p><p className="px-2 pt-1 text-[11px] text-[oklch(78.9%_0.154_211.53)]">Administrator</p><div className="mt-4 grid gap-1"><Link href="/documentation" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"><Icon name="book" />Documentation</Link><Link href="/chat" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"><Icon name="chat" />Open workspace</Link><button onClick={signOut} className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"><Icon name="logout" />Sign out</button></div></div>
+  return <div className="admin-shell-layout">
+    <aside className="admin-sidebar admin-app-sidebar">
+      <Link href="/" className="admin-app-brand"><img src="/icon.svg" alt="Starlen" />starlen</Link>
+      <p className="admin-app-section-label">Administration</p>
+      <nav className="admin-app-nav">{links.map((link) => <Link key={link.href} href={link.href} title={link.label} className={`admin-app-nav-link ${isCurrent(link.href) ? "active" : ""}`}><Icon name={link.icon} /><span>{link.label}</span></Link>)}</nav>
+      <div className="admin-app-footer"><p>{email}</p><small>Administrator</small><div><Link href="/chat" className="admin-app-nav-link"><Icon name="chat" /><span>Open workspace</span></Link><button onClick={signOut} className="admin-app-nav-link"><Icon name="logout" /><span>Sign out</span></button></div></div>
     </aside>
     <div className="pb-20 md:pb-0">{children}</div>
   </div>;

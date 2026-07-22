@@ -72,7 +72,9 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan, docs_url="/docs")
+# Do not publish the API schema or Swagger UI. Public documentation exposes every
+# endpoint and request shape to untrusted users after deployment.
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[str(origin).rstrip("/") for origin in settings.allowed_origins],
