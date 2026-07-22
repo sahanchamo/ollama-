@@ -1,0 +1,56 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: production-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" && test -n "$VPS_KNOWN_HOSTS" && test -n "$VPS_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy gateway
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -p "${VPS_PORT:-22}" -o BatchMode=yes "${VPS_USER}@${VPS_HOST}" 'bash -s' <<'REMOTE'
+            set -Eeuo pipefail
+            cd /var/www/ollama-gateway
+            git fetch origin main
+            git merge --ff-only origin/main
+
+            attempt=1
+            until docker compose build gateway; do
+              if [ "$attempt" -ge 3 ]; then
+                echo "Gateway image build failed after $attempt attempts."
+                exit 1
+              fi
+              echo "Build failed; retrying in $((attempt * 20)) seconds..."
+              sleep "$((attempt * 20))"
+              attempt=$((attempt + 1))
+            done
+
+            docker compose up -d --no-deps --force-recreate gateway
+            curl --fail --silent --show-error http://127.0.0.1:8000/health/ready
+          REMOTE

@@ -15,7 +15,8 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: "60"
       DATABASE_URL: postgresql+asyncpg://ollama:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/ollama_gateway
       REDIS_URL: redis://redis:6379/0
-      OLLAMA_BASE_URL: http://ollama:11434
+      # Override in the VPS .env to use a private Tailscale Ollama endpoint.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       # The Next.js gateway and FastAPI run together in this container; avoid routing
       # server-side API calls out through the public domain/Nginx.
       OLLAMA_GATEWAY_URL: http://127.0.0.1:8000/api/v1
