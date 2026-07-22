@@ -13,6 +13,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Temporary deployment freeze. Remove this line to re-enable the workflow.
+    if: ${{ false }}
     name: Build and deploy
     runs-on: ubuntu-latest
     steps:

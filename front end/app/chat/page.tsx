@@ -140,7 +140,13 @@ export default function ChatWorkspace() {
     const chatModels = (data.models || []).filter((item: Model) => !/(embed|embedding)/i.test(item.name));
     setModels(chatModels);
     if (chatModels.length) {
-      setModel((current) => chatModels.some((item: Model) => item.name === current) ? current : chatModels[0].name);
+      const fallback = chatModels[0].name;
+      setModel((current) => chatModels.some((item: Model) => item.name === current) ? current : fallback);
+      if (active && !chatModels.some((item: Model) => item.name === active.model)) {
+        const updated = await api(`/conversations/${active.id}`, { method: "PATCH", body: JSON.stringify({ model: fallback }) });
+        setActive((current) => current?.id === active.id ? { ...current, ...updated } : current);
+        setNotice(`${active.model} is hidden by an administrator. Switched this chat to ${fallback}.`);
+      }
     } else {
       setNotice("No chat model is installed. Pull qwen2.5:3b in Ollama, then refresh.");
     }
@@ -320,6 +326,15 @@ export default function ChatWorkspace() {
   }, [token]);
 
   useEffect(() => {
+    if (!token) return;
+    const refreshModels = () => void loadModels().catch((error) => setNotice((error as Error).message));
+    const onStorage = (event: StorageEvent) => { if (event.key === "starlen_model_policy_updated") refreshModels(); };
+    window.addEventListener("focus", refreshModels);
+    window.addEventListener("storage", onStorage);
+    return () => { window.removeEventListener("focus", refreshModels); window.removeEventListener("storage", onStorage); };
+  }, [token, active?.id]);
+
+  useEffect(() => {
     if (!notice) return;
     const timeout = window.setTimeout(() => setNotice(""), 5000);
     return () => window.clearTimeout(timeout);
@@ -365,9 +380,8 @@ export default function ChatWorkspace() {
       <section className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center gap-3 px-3 sm:px-5">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="rounded-lg p-2 text-slate-300 hover:bg-white/10">☰</button>
-          <div className="model-picker"><span>Model</span><select value={selectedModel} onChange={(event) => void changeModel(event.target.value)} aria-label="Select AI model">
-            <option value={selectedModel}>{selectedModel}</option>
-            {models.filter((item) => item.name !== selectedModel).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+          <div className="model-picker"><span>Model</span><select value={selectedModel} onChange={(event) => void changeModel(event.target.value)} aria-label="Select AI model" disabled={!models.length}>
+            {models.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
           </select><button type="button" onClick={() => void loadModels()} title="Refresh installed models" aria-label="Refresh models">↻</button></div>
           <button onClick={() => setMemoriesOpen(true)} className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10">Memory</button>
           {active && <div className="ml-auto flex gap-1"><button onClick={renameConversation} className="rounded-lg px-3 py-1.5 text-sm hover:bg-white/10">Rename</button><button onClick={deleteConversation} className="rounded-lg px-3 py-1.5 text-sm text-rose-200 hover:bg-white/10">Delete</button></div>}

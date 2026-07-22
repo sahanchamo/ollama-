@@ -5,8 +5,6 @@ from app.db.models import ModelAccess, User, UserModelAccess
 
 async def model_allowed_for_user(db: AsyncSession, user: User, model: str) -> bool:
     """Apply a user override first, then the global model policy."""
-    if user.is_admin:
-        return True
     override = await db.get(UserModelAccess, {"user_id": user.id, "model": model})
     if override is not None:
         return override.enabled

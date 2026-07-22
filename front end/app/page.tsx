@@ -1,168 +1,78 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 type User = { id: string; email: string; is_admin: boolean; is_active: boolean };
 type UsageUser = User & { input_tokens: number; output_tokens: number; total_tokens: number; request_count: number; last_activity: string | null };
 type Overview = { user_count: number; active_user_count: number; request_count: number; input_tokens: number; output_tokens: number; total_tokens: number; users: UsageUser[] };
-type ApiKey = { id: string; user_id: string; name: string; key_prefix: string; created_at: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null };
-type Analytics = { days: number; active_key_count: number; revoked_key_count: number; daily: { day: string; request_count: number; input_tokens: number; output_tokens: number }[]; models: { model: string; request_count: number; input_tokens: number; output_tokens: number; total_tokens: number; average_duration_ms: number }[]; recent: { id: string; email: string; model: string; input_tokens: number; output_tokens: number; total_duration_ns: number; status: string; created_at: string }[] };
+type ApiKey = { id: string; user_id: string; name: string; key_prefix: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null };
+type Analytics = { days: number; active_key_count: number; revoked_key_count: number; daily: { day: string; request_count: number; input_tokens: number; output_tokens: number }[]; models: { model: string; request_count: number; total_tokens: number; average_duration_ms: number }[]; recent: { id: string; email: string; model: string; input_tokens: number; output_tokens: number; status: string; created_at: string }[] };
 type ManagedModel = { model: string; enabled: boolean };
 
-const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "/api/gateway").replace(/\/$/, "");
+const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "/api/gateway").replace(/\/$/, "");
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+function Icon({ name }: { name: "grid" | "users" | "key" | "chart" | "settings" | "book" | "chat" | "refresh" | "logout" | "plus" | "more" }) {
+  const paths = {
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
+    key: <><circle cx="7.5" cy="15.5" r="4.5" /><path d="m21 2-9.8 9.8M15 6l3 3M18 3l3 3" /></>,
+    chart: <><path d="M3 3v18h18" /><path d="m7 16 4-5 3 3 6-8" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06A1.7 1.7 0 0 0 15.74 18a1.7 1.7 0 0 0-1.03 1.55V20h-3v-.45A1.7 1.7 0 0 0 10.68 18a1.7 1.7 0 0 0-1.88 1l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.55-1.03H5v-3h.45A1.7 1.7 0 0 0 7 9.94a1.7 1.7 0 0 0-.32-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0 0 10.68 7a1.7 1.7 0 0 0 1.03-1.55V5h3v.45A1.7 1.7 0 0 0 15.74 7a1.7 1.7 0 0 0 1.88-1.06l.06-.06L19.8 8l-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.55 1.03H21v3h-.05A1.7 1.7 0 0 0 19.4 15Z" /></>,
+    book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></>,
+    chat: <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />,
+    refresh: <><path d="M21 12a9 9 0 0 1-15.2 6.5L3 16" /><path d="M3 21v-5h5M3 12A9 9 0 0 1 18.2 5.5L21 8" /><path d="M21 3v5h-5" /></>,
+    logout: <><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M21 19V5a2 2 0 0 0-2-2h-6" /></>,
+    plus: <><path d="M12 5v14M5 12h14" /></>,
+    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="admin-icon">{paths[name]}</svg>;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [token, setToken] = useState("");
-  const [user, setUser] = useState<User | null>(null);
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [rangeDays, setRangeDays] = useState(30);
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [managedModels, setManagedModels] = useState<ManagedModel[]>([]);
-  const [modelFilter, setModelFilter] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [keyName, setKeyName] = useState("Production integration");
-  const [expiryDays, setExpiryDays] = useState("90");
-  const [newKey, setNewKey] = useState("");
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserPassword, setNewUserPassword] = useState("");
-  const [resetPassword, setResetPassword] = useState("");
-  const [status, setStatus] = useState("Loading administrator session…");
-
+  const [token, setToken] = useState(""); const [me, setMe] = useState<User | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null); const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [models, setModels] = useState<ManagedModel[]>([]); const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [days, setDays] = useState(30); const [status, setStatus] = useState("Loading control centre…");
+  const [newEmail, setNewEmail] = useState(""); const [newPassword, setNewPassword] = useState("");
+  const [selectedUser, setSelectedUser] = useState(""); const [keyName, setKeyName] = useState("Production integration"); const [expiry, setExpiry] = useState("90"); const [newKey, setNewKey] = useState("");
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
-  const rankedUsers = useMemo(() => [...(overview?.users || [])].sort((a, b) => b.total_tokens - a.total_tokens), [overview]);
-  const maximumTokens = Math.max(...rankedUsers.map((item) => item.total_tokens), 1);
-  const visibleModels = managedModels.filter((model) => model.model.toLowerCase().includes(modelFilter.toLowerCase()));
-  const enabledModels = managedModels.filter((model) => model.enabled).length;
+  const users = useMemo(() => [...(overview?.users || [])].sort((a, b) => b.total_tokens - a.total_tokens), [overview]);
 
-  function logout() {
-    sessionStorage.removeItem("ollama_gateway_token");
-    sessionStorage.removeItem("ollama_gateway_user");
-    router.replace("/login");
-  }
-
-  async function request(path: string, init: RequestInit = {}) {
-    const response = await fetch(`${baseUrl}${path}`, { ...init, headers: { ...headers, ...init.headers } });
+  const request = async (path: string, init: RequestInit = {}) => {
+    const response = await fetch(`${base}${path}`, { ...init, headers: { ...headers, ...init.headers } });
     const body = response.status === 204 ? null : await response.json().catch(() => null);
-    if (!response.ok) throw new Error(body?.detail || "Request failed");
-    return body;
-  }
+    if (!response.ok) throw new Error(body?.detail || "Request failed"); return body;
+  };
+  const load = async () => { try {
+    const [nextOverview, nextAnalytics, nextModels, nextKeys] = await Promise.all([request("/admin/overview"), request(`/admin/analytics?days=${days}`), request("/admin/models"), request("/admin/api-keys")]);
+    setOverview(nextOverview); setAnalytics(nextAnalytics); setModels(nextModels); setKeys(nextKeys); setSelectedUser((value) => value || nextOverview.users[0]?.id || ""); setStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+  } catch (error) { setStatus(`Could not refresh: ${(error as Error).message}`); } };
+  const logout = () => { sessionStorage.removeItem("ollama_gateway_token"); sessionStorage.removeItem("ollama_gateway_user"); router.replace("/login"); };
+  const toggleUser = async (user: UsageUser) => { try { await request(`/admin/users/${user.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !user.is_active }) }); setStatus(`${user.email} ${user.is_active ? "suspended" : "restored"}.`); await load(); } catch (error) { setStatus((error as Error).message); } };
+  const toggleModel = async (model: ManagedModel) => { try { await request(`/admin/models/${encodeURIComponent(model.model)}`, { method: "PUT", body: JSON.stringify({ enabled: !model.enabled }) }); setStatus(`${model.model} ${model.enabled ? "disabled" : "enabled"}.`); await load(); } catch (error) { setStatus((error as Error).message); } };
+  const createUser = async () => { try { const created = await request("/admin/users", { method: "POST", body: JSON.stringify({ email: newEmail, password: newPassword }) }); setNewEmail(""); setNewPassword(""); setSelectedUser(created.id); setStatus(`${created.email} was created.`); await load(); } catch (error) { setStatus((error as Error).message); } };
+  const createKey = async () => { try { const created = await request("/admin/api-keys", { method: "POST", body: JSON.stringify({ user_id: selectedUser, name: keyName, expires_in_days: Number(expiry) || undefined }) }); setNewKey(created.api_key); setStatus("Key created. Copy it now; it cannot be viewed again."); await load(); } catch (error) { setStatus((error as Error).message); } };
+  const revokeKey = async (id: string) => { if (!window.confirm("Revoke this API key?")) return; try { await request(`/admin/api-keys/${id}`, { method: "DELETE" }); setStatus("API key revoked."); await load(); } catch (error) { setStatus((error as Error).message); } };
 
-  async function loadDashboard() {
-    try {
-      const [nextOverview, nextKeys, nextAnalytics, nextModels] = await Promise.all([request("/admin/overview"), request("/admin/api-keys"), request(`/admin/analytics?days=${rangeDays}`), request("/admin/models")]);
-      setOverview(nextOverview); setKeys(nextKeys); setAnalytics(nextAnalytics); setManagedModels(nextModels);
-      if (!selectedUserId && nextOverview.users.length) setSelectedUserId(nextOverview.users[0].id);
-      setStatus(`Updated ${new Date().toLocaleTimeString()}`);
-    } catch (error) { setStatus(`Dashboard error: ${(error as Error).message}`); }
-  }
+  useEffect(() => { const saved = sessionStorage.getItem("ollama_gateway_token"); if (!saved) { router.replace("/login"); return; } void (async () => { try { const response = await fetch(`${base}/auth/me`, { headers: { Authorization: `Bearer ${saved}` } }); const current = await response.json(); if (!response.ok || !current.is_admin) { router.replace("/chat"); return; } setMe(current); setToken(saved); } catch { logout(); } })(); }, [router]);
+  useEffect(() => { if (token) void load(); }, [token, days]);
+  if (!me) return <main className="admin-loading">Verifying administrator access…</main>;
 
-  async function toggleModel(model: ManagedModel) {
-    try { await request(`/admin/models/${encodeURIComponent(model.model)}`, { method: "PUT", body: JSON.stringify({ enabled: !model.enabled }) }); setStatus(`${model.model} ${model.enabled ? "disabled" : "enabled"}.`); await loadDashboard(); }
-    catch (error) { setStatus(`Could not update model: ${(error as Error).message}`); }
-  }
-
-  async function createKey() {
-    if (!selectedUserId) return;
-    try {
-      const expires = Number(expiryDays);
-      const created = await request("/admin/api-keys", {
-        method: "POST",
-        body: JSON.stringify({ user_id: selectedUserId, name: keyName, expires_in_days: expires > 0 ? expires : undefined }),
-      });
-      setNewKey(created.api_key); setStatus("API key created. Copy it before leaving this page."); await loadDashboard();
-    } catch (error) { setStatus(`Could not create key: ${(error as Error).message}`); }
-  }
-
-  async function revokeKey(id: string) {
-    if (!window.confirm("Revoke this API key? This cannot be undone.")) return;
-    try { await request(`/admin/api-keys/${id}`, { method: "DELETE" }); setStatus("API key revoked."); await loadDashboard(); }
-    catch (error) { setStatus(`Could not revoke key: ${(error as Error).message}`); }
-  }
-
-  async function updateUser(userId: string, isActive: boolean) {
-    try {
-      await request(`/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify({ is_active: isActive }) });
-      setStatus(`User ${isActive ? "enabled" : "disabled"}.`); await loadDashboard();
-    } catch (error) { setStatus(`Could not update user: ${(error as Error).message}`); }
-  }
-
-  async function createUser() {
-    try {
-      const created = await request("/admin/users", { method: "POST", body: JSON.stringify({ email: newUserEmail, password: newUserPassword }) });
-      setNewUserEmail("");
-      setNewUserPassword("");
-      setSelectedUserId(created.id);
-      setStatus(`User ${created.email} created.`);
-      await loadDashboard();
-    } catch (error) { setStatus(`Could not create user: ${(error as Error).message}`); }
-  }
-
-  async function resetUserPassword() {
-    if (!selectedUserId || resetPassword.length < 12) return;
-    try {
-      await request(`/admin/users/${selectedUserId}/password`, { method: "PUT", body: JSON.stringify({ password: resetPassword }) });
-      setResetPassword("");
-      setStatus("Password reset. Share the new password with the user securely.");
-    } catch (error) { setStatus(`Could not reset password: ${(error as Error).message}`); }
-  }
-
-  useEffect(() => {
-    const savedToken = sessionStorage.getItem("ollama_gateway_token");
-    if (!savedToken) { router.replace("/login"); return; }
-    const load = async () => {
-      try {
-        const response = await fetch(`${baseUrl}/auth/me`, { headers: { Authorization: `Bearer ${savedToken}` } });
-        if (!response.ok) throw new Error("Session expired");
-        const me = await response.json();
-        setUser(me); setToken(savedToken);
-        if (!me.is_admin) setStatus("This account does not have administrator access.");
-      } catch { logout(); }
-    };
-    void load();
-  }, [router]);
-
-  useEffect(() => { if (token && user?.is_admin) void loadDashboard(); }, [token, user?.is_admin, rangeDays]);
-
-  if (!user) return <main className="grid min-h-screen place-items-center text-slate-400">Verifying access…</main>;
-  if (!user.is_admin) return <main className="grid min-h-screen place-items-center p-4"><section className="max-w-md rounded-2xl border border-rose-500/30 bg-slate-900 p-8 text-center"><p className="text-sm font-semibold tracking-[.2em] text-rose-400">ACCESS DENIED</p><h1 className="mt-3 text-2xl font-bold">Administrator account required</h1><p className="mt-2 text-sm text-slate-400">Your user dashboard has been removed. Ask an administrator for access.</p><button onClick={logout} className="mt-6 rounded bg-slate-700 px-4 py-2">Sign out</button></section></main>;
-
-  return <main className="starlen-console min-h-screen bg-[#07111f] p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl"><header className="console-hero flex flex-col gap-5 rounded-3xl border border-slate-700/70 p-5 md:flex-row md:items-center md:justify-between md:p-7"><div className="flex items-start gap-4"><img src="/icon.svg" className="mt-1 h-11 w-11 rounded-2xl" alt="Starlen" /><div><p className="text-xs font-bold tracking-[.26em] text-violet-300">STARLEN CONTROL</p><h1 className="mt-2 text-3xl font-bold">Administration</h1><p className="mt-1 text-sm text-slate-400">Monitor usage, protect access, and keep every workspace healthy.</p></div></div><div className="flex items-center gap-3"><div className="hidden text-right text-xs text-slate-400 md:block"><p className="max-w-48 truncate">{user.email}</p><p className="text-violet-300">Administrator</p></div><button onClick={loadDashboard} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white">Refresh</button><button onClick={logout} className="rounded-xl border border-slate-700 px-4 py-2 text-sm">Sign out</button></div></header><nav className="console-nav mt-4 flex gap-2 overflow-auto rounded-2xl border border-slate-800 bg-slate-950/40 p-2"><Link href="/" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white">Overview</Link><Link href="/users" className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Users</Link><Link href="/api-keys" className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">API keys</Link><Link href="/analytics" className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Analytics</Link><Link href="/documentation" className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Documentation</Link><Link href="/chat" className="ml-auto rounded-xl px-4 py-2 text-sm text-cyan-300 hover:bg-slate-800">Open chat</Link></nav>
-
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-400">{status}</p><label className="flex items-center gap-2 text-sm text-slate-400">Analytics range<select value={rangeDays} onChange={(event) => setRangeDays(Number(event.target.value))} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option></select></label></div>
-    {overview && <><section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Registered users" value={overview.user_count} tone="text-violet-300" /><Metric label="Active users" value={overview.active_user_count} tone="text-emerald-300" /><Metric label="AI requests" value={overview.request_count} tone="text-cyan-300" /><Metric label="Total tokens" value={compact.format(overview.total_tokens)} tone="text-amber-300" /></section>
-
-    <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-semibold">Model access</h2><p className="mt-1 text-sm text-slate-400">Control what users can select. Disabled models are blocked at the API too.</p></div><div className="flex gap-2"><input value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} placeholder="Find a model" className="w-40 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none focus:border-violet-400" /><span className="rounded bg-violet-500/15 px-2 py-2 text-xs text-violet-300">{enabledModels}/{managedModels.length} on</span></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{visibleModels.map((model) => <div key={model.model} className={`model-access-card flex items-center justify-between gap-3 rounded-xl border p-3 ${model.enabled ? "border-white/10 bg-black/20" : "border-rose-400/20 bg-rose-950/10"}`}><div className="min-w-0"><p className="truncate text-sm font-medium">{model.model}</p><p className={model.enabled ? "mt-1 text-xs text-emerald-300" : "mt-1 text-xs text-rose-300"}>{model.enabled ? "Available to users" : "Disabled for users"}</p></div><button onClick={() => void toggleModel(model)} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${model.enabled ? "bg-rose-500/15 text-rose-200 hover:bg-rose-500/25" : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"}`}>{model.enabled ? "Disable" : "Enable"}</button></div>)}{!visibleModels.length && <p className="text-sm text-slate-400">No models match this search.</p>}</div></section>
-
-    {analytics && <section className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_1fr]"><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><div className="flex items-start justify-between"><div><h2 className="font-semibold">Token and request trend</h2><p className="text-sm text-slate-400">Daily activity across the last {analytics.days} days</p></div><span className="rounded bg-cyan-500/15 px-2 py-1 text-xs text-cyan-300">Live database data</span></div><UsageChart points={analytics.daily} /></div><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><h2 className="font-semibold">Model performance</h2><p className="text-sm text-slate-400">Usage and average response time</p><div className="mt-5 space-y-4">{analytics.models.map((model) => <div key={model.model} className="rounded-lg bg-slate-950 p-3"><div className="flex justify-between gap-3"><b className="truncate text-sm">{model.model}</b><span className="text-xs text-slate-400">{model.request_count} requests</span></div><div className="mt-2 flex justify-between text-xs text-slate-400"><span>{compact.format(model.total_tokens)} tokens</span><span>{model.average_duration_ms.toLocaleString()} ms avg</span></div></div>)}{!analytics.models.length && <p className="mt-5 text-sm text-slate-400">No model activity in this range.</p>}</div></div></section>}
-
-    <section className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_1fr]"><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><div className="flex items-start justify-between"><div><h2 className="font-semibold">Usage by user</h2><p className="text-sm text-slate-400">Total input and generated tokens</p></div><span className="rounded bg-violet-500/15 px-2 py-1 text-xs text-violet-300">Top {Math.min(rankedUsers.length, 8)}</span></div><div className="mt-6 space-y-4">{rankedUsers.slice(0, 8).map((item) => <div key={item.id}><div className="mb-1 flex justify-between gap-4 text-sm"><span className="truncate">{item.email}</span><span className="shrink-0 font-medium">{compact.format(item.total_tokens)} tokens</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" style={{ width: `${Math.max((item.total_tokens / maximumTokens) * 100, 1)}%` }} /></div><div className="mt-1 flex justify-between text-xs text-slate-500"><span>Input {compact.format(item.input_tokens)} · Output {compact.format(item.output_tokens)}</span><span>{item.request_count} requests</span></div></div>)}{!rankedUsers.length && <p className="text-sm text-slate-400">No tracked usage yet.</p>}</div></div>
-
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><h2 className="font-semibold">Token composition</h2><p className="text-sm text-slate-400">Prompt versus generated tokens</p><div className="mt-7 flex items-center gap-6"><div className="grid h-36 w-36 place-items-center rounded-full" style={{ background: `conic-gradient(#22d3ee 0 ${(overview.total_tokens ? overview.input_tokens / overview.total_tokens : 0) * 360}deg, #a78bfa 0 360deg)` }}><div className="grid h-24 w-24 place-items-center rounded-full bg-slate-900 text-center"><b className="text-lg">{compact.format(overview.total_tokens)}</b><span className="text-[10px] text-slate-400">TOKENS</span></div></div><div className="space-y-3 text-sm"><p><span className="mr-2 inline-block h-3 w-3 rounded bg-cyan-400" />Input <b className="ml-2">{compact.format(overview.input_tokens)}</b></p><p><span className="mr-2 inline-block h-3 w-3 rounded bg-violet-400" />Output <b className="ml-2">{compact.format(overview.output_tokens)}</b></p><p className="border-t border-slate-800 pt-3 text-slate-400">Average <b className="text-slate-100">{overview.request_count ? Math.round(overview.total_tokens / overview.request_count) : 0}</b> tokens / request</p></div></div></div></section>
-
-    <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_.9fr]"><div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70"><div className="border-b border-slate-800 p-5"><h2 className="font-semibold">User activity</h2><p className="text-sm text-slate-400">All users, ordered by usage</p></div><div className="overflow-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-slate-950/80 text-xs uppercase tracking-wide text-slate-400"><tr><th className="p-4">User</th><th>Requests</th><th>Input</th><th>Output</th><th>Last activity</th></tr></thead><tbody>{rankedUsers.map((item) => <tr key={item.id} className="border-t border-slate-800"><td className="p-4"><p>{item.email}</p><span className={item.is_active ? "text-xs text-emerald-300" : "text-xs text-rose-300"}>{item.is_admin ? "Admin · " : ""}{item.is_active ? "Active" : "Disabled"}</span></td><td>{item.request_count}</td><td>{compact.format(item.input_tokens)}</td><td>{compact.format(item.output_tokens)}</td><td className="text-xs text-slate-400">{item.last_activity ? new Date(item.last_activity).toLocaleString() : "Never"}</td></tr>)}</tbody></table></div></div>
-
-    <div className="space-y-6"><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><h2 className="font-semibold">Create user</h2><p className="mt-1 text-sm text-slate-400">Create a standard user account. You can assign roles and quotas afterward.</p><div className="mt-5 space-y-3"><label className="block text-sm">Email<input required type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2" /></label><label className="block text-sm">Temporary password<input required type="password" minLength={12} value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2" /></label><button onClick={createUser} disabled={!newUserEmail || newUserPassword.length < 12} className="w-full rounded-md bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Create user</button></div></div><div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><h2 className="font-semibold">Generate API key</h2><p className="mt-1 text-sm text-slate-400">A key is displayed once; store it securely.</p><div className="mt-5 space-y-3"><label className="block text-sm">Owner<select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2">{rankedUsers.map((item) => <option value={item.id} key={item.id}>{item.email}</option>)}</select></label><label className="block text-sm">Key name<input value={keyName} onChange={(e) => setKeyName(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2" /></label><label className="block text-sm">Expiry days <span className="text-slate-500">(0 = no expiry)</span><input type="number" min="0" value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2" /></label><button onClick={createKey} className="w-full rounded-md bg-violet-500 px-4 py-3 font-semibold text-white">Generate API key</button>{newKey && <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3"><p className="text-xs text-amber-300">Copy now — this secret cannot be shown again.</p><code className="mt-2 block break-all text-xs text-amber-100">{newKey}</code></div>}</div></div></div></section>
-
-    <section id="api-keys" className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70"><div className="border-b border-slate-800 p-5"><h2 className="font-semibold">API key registry</h2><p className="text-sm text-slate-400">Revoke keys immediately when no longer needed.</p></div><div className="overflow-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-slate-950/80 text-xs uppercase tracking-wide text-slate-400"><tr><th className="p-4">Key</th><th>Owner</th><th>Last used</th><th>Expiry</th><th /></tr></thead><tbody>{keys.map((key) => { const owner = overview.users.find((item) => item.id === key.user_id); return <tr className="border-t border-slate-800" key={key.id}><td className="p-4"><p>{key.name}</p><code className="text-xs text-slate-400">{key.key_prefix}…</code></td><td>{owner?.email || key.user_id}</td><td className="text-xs text-slate-400">{key.last_used_at ? new Date(key.last_used_at).toLocaleString() : "Never"}</td><td className="text-xs text-slate-400">{key.expires_at ? new Date(key.expires_at).toLocaleDateString() : "Never"}</td><td className="p-4">{key.revoked_at ? <span className="text-xs text-slate-500">Revoked</span> : <button onClick={() => revokeKey(key.id)} className="rounded bg-rose-500/15 px-3 py-1 text-xs font-semibold text-rose-300">Revoke</button>}</td></tr>; })}{!keys.length && <tr><td className="p-4 text-slate-400" colSpan={5}>No API keys created.</td></tr>}</tbody></table></div></section></>}
-  </div></main>;
+  const nav = [{ href: "/", label: "Overview", icon: "grid" as const }, { href: "/users", label: "People", icon: "users" as const }, { href: "/api-keys", label: "API access", icon: "key" as const }, { href: "/analytics", label: "Usage & limits", icon: "chart" as const }, { href: "/admin/settings", label: "Settings", icon: "settings" as const }];
+  return <main className="admin-workspace">
+    <aside className="admin-sidebar"><Link href="/" className="admin-brand"><img src="/icon.svg" alt="Starlen" /><span>starlen</span></Link><p className="admin-section-label">Workspace</p><nav>{nav.map((item) => <Link key={item.href} href={item.href} className={item.href === "/" ? "active" : ""}><Icon name={item.icon} />{item.label}</Link>)}</nav><p className="admin-section-label admin-spaced">Support</p><nav><Link href="/documentation"><Icon name="book" />Documentation</Link><Link href="/chat"><Icon name="chat" />Open workspace</Link></nav><div className="admin-sidebar-footer"><div className="admin-profile"><span>{me.email.slice(0, 1).toUpperCase()}</span><div><b>{me.email.split("@")[0]}</b><small>Administrator</small></div></div><button onClick={logout} aria-label="Sign out"><Icon name="logout" /></button></div></aside>
+    <div className="admin-main"><header className="admin-topbar"><div><p className="eyebrow">Administration</p><h1>Good afternoon, {me.email.split("@")[0]}</h1><p className="admin-subtitle">A clear view of your AI workspace and its access.</p></div><div className="admin-top-actions"><span className="sync-status"><i />{status}</span><button className="button-quiet" onClick={() => void load()}><Icon name="refresh" />Refresh</button><Link className="button-primary" href="/users"><Icon name="plus" />Add user</Link></div></header>
+      <section className="admin-metrics">{overview && <><Metric label="Total users" value={overview.user_count} note={`${overview.active_user_count} active`} /><Metric label="Requests" value={compact.format(overview.request_count)} note={`Last ${days} days`} /><Metric label="Tokens processed" value={compact.format(overview.total_tokens)} note={`${overview.request_count ? compact.format(Math.round(overview.total_tokens / overview.request_count)) : 0} per request`} /><Metric label="Active API keys" value={analytics?.active_key_count ?? "–"} note={`${analytics?.revoked_key_count ?? 0} revoked`} /></>}</section>
+      <section className="admin-grid admin-primary-grid"><article className="admin-card"><div className="card-heading"><div><p className="card-kicker">Activity</p><h2>Request volume</h2></div><select value={days} onChange={(event) => setDays(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></div><Trend points={analytics?.daily || []} /></article><article className="admin-card"><div className="card-heading"><div><p className="card-kicker">System</p><h2>Model availability</h2></div><span className="count-chip">{models.filter((model) => model.enabled).length}/{models.length} live</span></div><div className="model-list">{models.slice(0, 4).map((model) => <div key={model.model}><span className={model.enabled ? "model-dot" : "model-dot muted"} /><b>{model.model}</b><button onClick={() => void toggleModel(model)}>{model.enabled ? "Enabled" : "Off"}</button></div>)}{!models.length && <p className="empty-note">No models available.</p>}</div><Link className="text-link" href="/users">Manage model access →</Link></article></section>
+      <section className="admin-grid admin-operations-grid"><article className="admin-card table-card"><div className="card-heading"><div><p className="card-kicker">People</p><h2>Recent users</h2></div><Link className="text-link" href="/users">View all</Link></div><div className="table-wrap"><table><thead><tr><th>User</th><th>Usage</th><th>Last active</th><th /></tr></thead><tbody>{users.slice(0, 6).map((item) => <tr key={item.id}><td><div className="user-cell"><span>{item.email[0].toUpperCase()}</span><div><b>{item.email}</b><small className={item.is_active ? "good" : "bad"}>{item.is_active ? "Active" : "Suspended"}{item.is_admin ? " · Admin" : ""}</small></div></div></td><td>{compact.format(item.total_tokens)} <small>tokens</small></td><td>{item.last_activity ? new Date(item.last_activity).toLocaleDateString() : "Never"}</td><td>{!item.is_admin && <button className="row-action" onClick={() => void toggleUser(item)}>{item.is_active ? "Suspend" : "Restore"}</button>}</td></tr>)}{!users.length && <tr><td colSpan={4} className="empty-note">No users yet.</td></tr>}</tbody></table></div></article><article className="admin-card action-card"><div className="card-heading"><div><p className="card-kicker">Quick action</p><h2>Create a user</h2></div></div><p>Set up an account with a temporary password. Access and limits can be refined afterward.</p><label>Email<input type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="name@company.com" /></label><label>Temporary password<input type="password" minLength={12} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 12 characters" /></label><button className="button-primary full" disabled={!newEmail || newPassword.length < 12} onClick={() => void createUser()}><Icon name="plus" />Create account</button></article></section>
+      <section className="admin-grid admin-bottom-grid"><article className="admin-card"><div className="card-heading"><div><p className="card-kicker">Security</p><h2>API key registry</h2></div><Link className="text-link" href="/api-keys">Manage keys</Link></div><div className="key-list">{keys.slice(0, 4).map((key) => <div key={key.id}><div><b>{key.name}</b><small>{key.key_prefix}… · {key.last_used_at ? "Used recently" : "Never used"}</small></div>{key.revoked_at ? <span className="key-revoked">Revoked</span> : <button className="row-action danger" onClick={() => void revokeKey(key.id)}>Revoke</button>}</div>)}{!keys.length && <p className="empty-note">No API keys issued.</p>}</div></article><article className="admin-card action-card compact-action"><div className="card-heading"><div><p className="card-kicker">Security</p><h2>Issue an API key</h2></div></div><label>Owner<select value={selectedUser} onChange={(event) => setSelectedUser(event.target.value)}>{users.map((item) => <option key={item.id} value={item.id}>{item.email}</option>)}</select></label><div className="form-pair"><label>Name<input value={keyName} onChange={(event) => setKeyName(event.target.value)} /></label><label>Expires<input type="number" min="0" value={expiry} onChange={(event) => setExpiry(event.target.value)} /></label></div><button className="button-primary full" disabled={!selectedUser || !keyName.trim()} onClick={() => void createKey()}><Icon name="key" />Issue key</button>{newKey && <div className="secret-box"><b>Copy this key now</b><code>{newKey}</code><button onClick={() => void navigator.clipboard.writeText(newKey)}>Copy to clipboard</button></div>}</article></section>
+    </div>
+  </main>;
 }
 
-function Metric({ label, value, tone }: { label: string; value: string | number; tone: string }) {
-  return <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><p className="text-sm text-slate-400">{label}</p><p className={`mt-2 text-3xl font-bold ${tone}`}>{value}</p></article>;
-}
-
-function UsageChart({ points }: { points: { day: string; request_count: number; input_tokens: number; output_tokens: number }[] }) {
-  if (!points.length) return <p className="mt-12 text-center text-sm text-slate-400">No activity in this selected range.</p>;
-  const maximum = Math.max(...points.map((point) => point.input_tokens + point.output_tokens), 1);
-  const coordinates = points.map((point, index) => {
-    const x = points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
-    const y = 92 - ((point.input_tokens + point.output_tokens) / maximum) * 78;
-    return `${x},${y}`;
-  }).join(" ");
-  return <><div className="mt-6 h-52"><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible"><line x1="0" x2="100" y1="92" y2="92" stroke="#334155" strokeWidth=".5" /><line x1="0" x2="100" y1="52" y2="52" stroke="#1e293b" strokeWidth=".5" /><line x1="0" x2="100" y1="14" y2="14" stroke="#1e293b" strokeWidth=".5" /><polyline points={coordinates} fill="none" stroke="#22d3ee" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div><div className="mt-2 flex justify-between text-xs text-slate-500"><span>{points[0].day}</span><span>Peak {compact.format(maximum)} tokens/day</span><span>{points[points.length - 1].day}</span></div></>;
-}
+function Metric({ label, value, note }: { label: string; value: string | number; note: string }) { return <article className="metric"><p>{label}</p><b>{value}</b><small>{note}</small></article>; }
+function Trend({ points }: { points: { day: string; input_tokens: number; output_tokens: number }[] }) { const values = points.map((point) => point.input_tokens + point.output_tokens); const maximum = Math.max(...values, 1); return <div className="trend"><div className="trend-bars">{points.map((point, index) => <span key={point.day} title={`${point.day}: ${compact.format(values[index])} tokens`} style={{ height: `${Math.max((values[index] / maximum) * 100, 3)}%` }} />)}</div><div><span>{points[0]?.day || "No activity"}</span><span>Peak {compact.format(maximum)} tokens</span><span>{points.at(-1)?.day || ""}</span></div></div>; }
