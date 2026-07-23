@@ -38,10 +38,10 @@ function createRequestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-function MessageContent({ content }: { content: string }) {
+function MessageContent({ content, onOpenSource }: { content: string; onOpenSource?: (url: string) => void }) {
   return (
     <div className="break-words leading-7 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-600 [&_blockquote]:pl-4 [&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-3 [&_h2]:mt-5 [&_h2]:text-xl [&_h2]:font-semibold [&_li]:ml-5 [&_ol]:my-3 [&_ol]:list-decimal [&_p]:my-3 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:bg-[#242424] [&_pre]:p-4 [&_pre]:leading-6 [&_ul]:my-3 [&_ul]:list-disc">
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown components={{ a: ({ href, children }) => href ? <a href={href} onClick={(event) => { event.preventDefault(); onOpenSource?.(href); }} className="source-link">{children}</a> : <>{children}</> }}>{content}</ReactMarkdown>
     </div>
   );
 }
@@ -76,6 +76,8 @@ export default function ChatWorkspace() {
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);
   const [responseLanguage, setResponseLanguage] = useState("");
   const [webResearch, setWebResearch] = useState(false);
+  const [deepThink, setDeepThink] = useState(false);
+  const [sourcePanelUrl, setSourcePanelUrl] = useState<string | null>(null);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
 
@@ -329,7 +331,7 @@ export default function ChatWorkspace() {
       setActive((current) => current ? { ...current, messages: [...current.messages, { id: userMessageId, role: "user", content, images, status: "complete", created_at: new Date().toISOString() }, temporary] } : current);
 
       const activeSkills = JSON.parse(localStorage.getItem("starlen_active_skill_sets") || "[]");
-      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images, skill_set_ids: Array.isArray(activeSkills) ? activeSkills.slice(0, 5) : [], use_web: webResearch }) });
+      const response = await fetch(`${base}/conversations/${chat.id}/messages`, { method: "POST", headers, body: JSON.stringify({ content, images, skill_set_ids: Array.isArray(activeSkills) ? activeSkills.slice(0, 5) : [], use_web: webResearch, think: deepThink }) });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.detail || "Message failed");
@@ -398,14 +400,14 @@ export default function ChatWorkspace() {
   const selectedModel = active?.model || model;
 
   return (
-    <main className="flex h-dvh overflow-hidden bg-[#212121] text-[#ececec]" onDragOver={(event) => { if (Array.from(event.dataTransfer.types).includes("Files")) { event.preventDefault(); setDraggingImages(true); } }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingImages(false); }} onDrop={(event) => { event.preventDefault(); setDraggingImages(false); void addScreenshots(Array.from(event.dataTransfer.files)); }}>
-      <aside className={`${sidebarOpen ? "w-[280px]" : "w-0"} relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#212121] transition-all duration-200`}>
+    <main className="chat-workspace flex h-dvh overflow-hidden bg-[#212121] text-[#ececec]" onDragOver={(event) => { if (Array.from(event.dataTransfer.types).includes("Files")) { event.preventDefault(); setDraggingImages(true); } }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingImages(false); }} onDrop={(event) => { event.preventDefault(); setDraggingImages(false); void addScreenshots(Array.from(event.dataTransfer.files)); }}>
+      <aside className={`${sidebarOpen ? "w-[280px]" : "w-0"} chat-sidebar relative flex shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#212121] transition-all duration-200`}>
         <div className="flex h-full w-[280px] flex-col p-2.5">
           <div className="flex items-center justify-between px-2 py-2">
-            <span className="grid h-7 w-7 place-items-center rounded-full border border-white/30 text-sm">◉</span>
+            <span aria-hidden="true" />
             <div className="flex gap-2 text-slate-300"><span>⌕</span><span>▯</span></div>
           </div>
-          <button onClick={createConversation} className="mt-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-[#2a2a2a]"><span className="text-lg">✎</span> New chat</button>
+          <button onClick={createConversation} className="chat-new-button mt-3 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm"><span className="text-lg">+</span> New chat</button>
           <div className="mt-6 px-2 text-xs font-medium text-slate-400">Chats</div>
           <div className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             {conversations.map((conversation) => (
@@ -424,6 +426,14 @@ export default function ChatWorkspace() {
         </div>
       </aside>
 
+      {sourcePanelUrl && <aside className="source-inspector" aria-label="Source details">
+        <header><div><p>Source details</p><strong>{(() => { try { return new URL(sourcePanelUrl).hostname; } catch { return "Source"; } })()}</strong></div><button type="button" onClick={() => setSourcePanelUrl(null)} aria-label="Close source details">×</button></header>
+        <a className="source-inspector-url" href={sourcePanelUrl} target="_blank" rel="noreferrer">{sourcePanelUrl}</a>
+        <a className="source-inspector-open" href={sourcePanelUrl} target="_blank" rel="noreferrer">Open original ↗</a>
+        <iframe title="Source preview" src={sourcePanelUrl} sandbox="allow-forms allow-popups allow-scripts" referrerPolicy="no-referrer" />
+        <p className="source-inspector-note">Some websites block previews. Use “Open original” to view the full page in a new tab.</p>
+      </aside>}
+
       <section className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center gap-3 px-3 sm:px-5">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="rounded-lg p-2 text-slate-300 hover:bg-white/10">☰</button>
@@ -441,20 +451,17 @@ export default function ChatWorkspace() {
               <article key={message.id} className={`group mb-8 flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={message.role === "user" ? "max-w-[82%] rounded-[24px] bg-[#303030] px-5 py-3 leading-7 shadow-sm" : "w-full px-1 py-1"}>
                   {message.images?.length ? <div className="mb-3 flex flex-wrap gap-2">{message.images.map((image, index) => <img key={`${message.id}-${index}`} src={`data:image/*;base64,${image}`} alt={`Attached screenshot ${index + 1}`} className="max-h-56 max-w-full rounded-xl border border-white/10 object-contain" />)}</div> : null}
-                  {message.content ? <MessageContent content={message.content} /> : message.status === "streaming" ? <span className="animate-pulse text-slate-400">Thinking…</span> : null}
+                  {message.content ? <MessageContent content={message.content} onOpenSource={setSourcePanelUrl} /> : message.status === "streaming" ? <span className="animate-pulse text-slate-400">Thinking…</span> : null}
                   {message.role === "assistant" && message.content && <><div className="mt-3 flex gap-3 text-sm text-slate-500 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" onClick={() => navigator.clipboard.writeText(message.content)} className="hover:text-white">▣ Copy</button><button type="button" onClick={() => speak(message)} className="hover:text-white">{speakingMessageId === message.id ? "Stop audio" : "Listen"}</button><button type="button" onClick={() => void regenerateResponse(message)} disabled={regeneratingMessageId === message.id} className="hover:text-white disabled:opacity-50">{regeneratingMessageId === message.id ? "Regenerating…" : "↻ Regenerate"}</button></div>{alternatives[message.id] && <div className="mt-5 rounded-2xl border border-sky-300/25 bg-sky-300/5 p-4"><p className="text-xs font-semibold uppercase tracking-[.14em] text-sky-200">Alternative answer</p><div className="mt-3"><MessageContent content={alternatives[message.id]} /></div><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => setAlternatives((current) => { const next = { ...current }; delete next[message.id]; return next; })} className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-white/10">Keep original</button><button type="button" onClick={() => void chooseAlternative(message, alternatives[message.id])} className="rounded-lg bg-sky-300 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-sky-200">Use alternative</button></div></div>}</>}
                 </div>
               </article>
             )) : (
-              <div className="pt-24 text-center sm:pt-32">
-                <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-[22px] shadow-2xl shadow-violet-950/50"><img src="/icon.svg" alt="Starlen" className="h-full w-full" /></div>
-                <p className="mt-4 text-xs font-bold tracking-[.34em] text-sky-300">STARLEN</p>
-                <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-[2.5rem]">How can I help you today?</h1>
-                <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-400">Ask questions, work with your private documents, or explore ideas with your local model.</p>
-                <div className="mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-2">
-                  <button onClick={() => setPrompt("Summarize my uploaded documents")} className="rounded-xl border border-white/10 bg-[#2a2a2a] px-4 py-3 text-sm text-slate-200 transition hover:bg-[#333333]">Summarize my documents</button>
-                  <button onClick={() => setPrompt("Help me plan a project")} className="rounded-xl border border-white/10 bg-[#2a2a2a] px-4 py-3 text-sm text-slate-200 transition hover:bg-[#333333]">Help me plan a project</button>
-                  <button onClick={() => setPrompt("Explain this clearly with examples")} className="rounded-xl border border-white/10 bg-[#2a2a2a] px-4 py-3 text-sm text-slate-200 transition hover:bg-[#333333]">Explain a topic</button>
+              <div className="chat-empty pt-24 text-center sm:pt-32">
+                <div className="chat-empty-title"><img src="/icon.svg" alt="Chat" /><h1>Start chatting</h1></div>
+                <div className="chat-modes" aria-label="Chat modes">
+                  <button type="button" className="active" onClick={() => setWebResearch(false)}>⚡ Instant</button>
+                  <button type="button" className={deepThink ? "active" : ""} onClick={() => setDeepThink((enabled) => !enabled)}>◇ Deep think</button>
+                  <button type="button" onClick={() => imageInput.current?.click()}>▧ Vision</button>
                 </div>
               </div>
             )}
@@ -465,14 +472,13 @@ export default function ChatWorkspace() {
           <div className="mx-auto max-w-3xl">
             <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void addScreenshot(file); event.currentTarget.value = ""; }} />
             <input ref={documentInput} type="file" multiple className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />
-            <div className="mb-2 flex justify-end"><button type="button" onClick={() => setWebResearch((enabled) => !enabled)} disabled={busy} aria-pressed={webResearch} title="Search the internet and cite sources" className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${webResearch ? "border-sky-300/50 bg-sky-300/15 text-sky-100" : "border-white/10 text-slate-400 hover:bg-white/5"}`}>{webResearch ? "Web research on" : "Web research"}</button></div>
             {/* Folder input uses Chromium's directory picker, supported by VS Code/Chrome-based browsers. */}
             {/* @ts-expect-error webkitdirectory is a browser-specific input attribute. */}
             <input ref={folderInput} type="file" multiple webkitdirectory="" className="hidden" onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length) void attachDocuments(files); event.currentTarget.value = ""; }} />
             <div className="rounded-[28px] border border-white/10 bg-[#303030] p-3 shadow-2xl shadow-black/30 transition focus-within:border-white/20 focus-within:bg-[#353535]">
               {attachedImages.length > 0 && <div className="mb-2 flex flex-wrap gap-2 px-2">{attachedImages.map((image, index) => <div key={`${image.name}-${index}`} className="group relative"><img src={`data:image/*;base64,${image.data}`} alt={image.name} className="h-16 w-20 rounded-lg border border-white/10 object-cover" /><button type="button" onClick={() => setAttachedImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${image.name}`} className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-black text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div>}
               <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onPaste={pasteScreenshots} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} disabled={busy} rows={1} placeholder="Ask anything · paste a screenshot with Ctrl+V" className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-slate-400" />
-              <div className="flex items-center justify-between"><div className="relative flex items-center gap-1"><button type="button" onClick={() => setAttachmentMenuOpen((open) => !open)} disabled={busy} aria-expanded={attachmentMenuOpen} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-50">📎 Attach</button>{attachmentMenuOpen && <div className="absolute bottom-10 left-0 z-20 w-44 rounded-xl border border-white/10 bg-[#252525] p-1 shadow-2xl"><button type="button" onClick={() => { setAttachmentMenuOpen(false); documentInput.current?.click(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Upload files</button><button type="button" onClick={() => { setAttachmentMenuOpen(false); folderInput.current?.click(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Upload folder</button></div>}<button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || (!prompt.trim() && !attachedImages.length)} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
+              <div className="flex items-center justify-between"><div className="flex items-center gap-4"><button type="button" onClick={() => setWebResearch((enabled) => !enabled)} disabled={busy} aria-pressed={webResearch} title="Search the internet and cite sources" className={`web-research-toggle rounded-lg border px-3 py-1.5 text-xs font-medium ${webResearch ? "is-on" : ""}`}><span aria-hidden="true">◉</span> Web research</button><button type="button" onClick={() => setDeepThink((enabled) => !enabled)} disabled={busy} aria-pressed={deepThink} className={`deep-think-toggle ${deepThink ? "is-on" : ""}`}>Deep think</button></div><div className="relative flex items-center gap-1"><button type="button" onClick={() => setAttachmentMenuOpen((open) => !open)} disabled={busy} aria-expanded={attachmentMenuOpen} className="rounded-lg px-2 py-1 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-50">📎 Attach</button>{attachmentMenuOpen && <div className="absolute bottom-10 left-0 z-20 w-44 rounded-xl border border-white/10 bg-[#252525] p-1 shadow-2xl"><button type="button" onClick={() => { setAttachmentMenuOpen(false); documentInput.current?.click(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Upload files</button><button type="button" onClick={() => { setAttachmentMenuOpen(false); folderInput.current?.click(); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Upload folder</button></div>}<button type="button" onClick={startVoiceInput} disabled={busy} aria-pressed={isListening} className={`rounded-lg px-2 py-1 text-sm transition ${isListening ? "bg-rose-500/20 text-rose-200" : "text-slate-300 hover:bg-white/10"}`}>{isListening ? "Stop recording" : "Voice input"}</button></div><button disabled={busy || (!prompt.trim() && !attachedImages.length)} className="grid h-9 w-9 place-items-center rounded-full bg-white text-lg text-black transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400">↑</button></div>
             </div>
             <p className="mt-2 text-center text-xs text-slate-500">Ollama can make mistakes. Check important information.</p>
           </div>

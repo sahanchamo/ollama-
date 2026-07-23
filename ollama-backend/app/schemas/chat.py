@@ -51,6 +51,7 @@ class SendMessageRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
     skill_set_ids: list[UUID] = Field(default_factory=list, max_length=5)
     use_web: bool = False
+    think: bool = False
 
 
 class MessageContentUpdate(BaseModel):

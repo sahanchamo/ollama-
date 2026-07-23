@@ -123,6 +123,72 @@ main:has(.model-picker) > aside { background: rgba(7,11,22,.80) !important; back
 /* Chat workspace: one flat charcoal surface, with only borders for separation. */
 main:has(.model-picker) { background: #212121 !important; } main:has(.model-picker) > aside, main:has(.model-picker) form, main:has(.model-picker) form > div > div, main:has(.model-picker) [class*="bg-[#171717]"], main:has(.model-picker) [class*="bg-[#2a2a2a]"], main:has(.model-picker) [class*="bg-[#2f2f2f]"], main:has(.model-picker) [class*="bg-[#303030]"] { background: #212121 !important; }
 
+/* Focused chat layout: compact navigation and a distraction-free composer. */
+.chat-workspace { background: #101112 !important; color: #f1f1f1; }
+.chat-workspace .chat-sidebar { background: #191a1b !important; border-color: #2b2c2d !important; }
+.chat-workspace .chat-brand { color: #73a0ff; font-size: 1.22rem; font-weight: 750; letter-spacing: -.035em; }
+.chat-workspace .chat-new-button { border: 1px solid #595c61; background: #4a4d53; color: #f8f8f8; font-weight: 650; transition: background .15s ease, border-color .15s ease; }
+.chat-workspace .chat-new-button:hover { border-color: #6a6e75; background: #575a60; }
+.chat-workspace .chat-sidebar > div > div:first-child { min-height: 38px; }
+.chat-workspace .chat-sidebar .border-t { border-color: #303134 !important; }
+.chat-workspace .chat-sidebar button:hover, .chat-workspace .chat-sidebar a:hover { background: #262729 !important; }
+.chat-workspace > section > header { background: #101112; }
+.chat-workspace .model-picker { border-color: #34363a !important; background: #1c1d1f !important; }
+.chat-workspace .model-picker select { background: #1c1d1f !important; }
+.chat-workspace .chat-empty { display: grid; justify-items: center; padding-top: min(25vh, 15rem); }
+.chat-workspace .chat-empty-title { display: flex; align-items: center; gap: .72rem; }
+.chat-workspace .chat-empty-title img { width: 2.15rem; height: 2.15rem; border-radius: .65rem; }
+.chat-workspace .chat-empty-title h1 { margin: 0; font-size: clamp(1.5rem, 2.5vw, 2rem); font-weight: 700; letter-spacing: -.035em; }
+.chat-workspace .chat-modes { display: inline-flex; overflow: hidden; margin-top: 1.75rem; border: 1px solid #393b3f; border-radius: 999px; background: #1f2022; }
+.chat-workspace .chat-modes button { border: 0; border-right: 1px solid #393b3f; padding: .62rem 1.35rem; color: #ececef; background: transparent; font-size: .84rem; font-weight: 650; }
+.chat-workspace .chat-modes button:last-child { border-right: 0; }
+.chat-workspace .chat-modes button:hover { background: #292b2e; }
+.chat-workspace .chat-modes button.active { color: #84aaff; background: #233149; box-shadow: inset 0 0 0 1px #4a74c9; }
+.chat-workspace form { background: #101112 !important; }
+.chat-workspace form > div > div.rounded-\[28px\] { border-color: #3b3d40 !important; background: #292a2c !important; box-shadow: none !important; }
+.chat-workspace form > div > div.rounded-\[28px\]:focus-within { border-color: #555a62 !important; background: #2d2e31 !important; }
+.chat-workspace form textarea { color: #f4f4f5; }
+.chat-workspace form textarea::placeholder { color: #94969b; }
+.chat-workspace form button[type="submit"] { background: #4d669e !important; color: #dbe6ff !important; }
+.chat-workspace form button[type="submit"]:disabled { background: #46484d !important; color: #93959b !important; }
+.chat-workspace .web-research-toggle { position: relative; display: inline-flex; align-items: center; border: 0; padding: .35rem 2.7rem .35rem 0; color: #b6b8be; background: transparent; transition: color .15s ease; }
+.chat-workspace .web-research-toggle span { display: none; }
+.chat-workspace .web-research-toggle::after { position: absolute; top: 50%; right: 0; width: 2.15rem; height: 1.18rem; border-radius: 999px; background: #55585f; box-shadow: inset 0 0 0 1px #6a6d73; content: ""; transform: translateY(-50%); transition: background .18s ease, box-shadow .18s ease; }
+.chat-workspace .web-research-toggle::before { position: absolute; z-index: 1; top: 50%; right: 1.23rem; width: .88rem; height: .88rem; border-radius: 50%; background: #d9dce1; box-shadow: 0 1px 3px rgba(0,0,0,.45); content: ""; transform: translateY(-50%); transition: right .18s ease, background .18s ease; }
+.chat-workspace .web-research-toggle:hover { color: #e7e9ed; }
+.chat-workspace .web-research-toggle.is-on { color: #a9ccff; }
+.chat-workspace .web-research-toggle.is-on::after { background: #3e78c4; box-shadow: inset 0 0 0 1px #6fb3ff; }
+.chat-workspace .web-research-toggle.is-on::before { right: .14rem; background: #fff; }
+.chat-workspace .deep-think-toggle { position: relative; border: 0; padding: .35rem 2.7rem .35rem 0; color: #b6b8be; background: transparent; font-size: .75rem; font-weight: 650; }
+.chat-workspace .deep-think-toggle::after { position: absolute; top: 50%; right: 0; width: 2.15rem; height: 1.18rem; border-radius: 999px; background: #55585f; box-shadow: inset 0 0 0 1px #6a6d73; content: ""; transform: translateY(-50%); transition: background .18s ease, box-shadow .18s ease; }
+.chat-workspace .deep-think-toggle::before { position: absolute; z-index: 1; top: 50%; right: 1.23rem; width: .88rem; height: .88rem; border-radius: 50%; background: #d9dce1; box-shadow: 0 1px 3px rgba(0,0,0,.45); content: ""; transform: translateY(-50%); transition: right .18s ease, background .18s ease; }
+.chat-workspace .deep-think-toggle:hover { color: #e7e9ed; }
+.chat-workspace .deep-think-toggle.is-on { color: #a9ccff; }
+.chat-workspace .deep-think-toggle.is-on::after { background: #3e78c4; box-shadow: inset 0 0 0 1px #6fb3ff; }
+.chat-workspace .deep-think-toggle.is-on::before { right: .14rem; background: #fff; }
+.chat-workspace .source-link { color: #8eb9ff; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.source-inspector { z-index: 25; display: flex; width: min(24rem, calc(100vw - 3rem)); flex: 0 0 auto; flex-direction: column; border-right: 1px solid #34363a; background: #171819; box-shadow: 12px 0 30px rgba(0,0,0,.25); }
+.source-inspector header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid #303236; }
+.source-inspector header p { margin: 0 0 .22rem; color: #8e9198; font-size: .68rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+.source-inspector header strong { display: block; max-width: 17rem; overflow: hidden; color: #f0f2f5; font-size: .9rem; text-overflow: ellipsis; white-space: nowrap; }
+.source-inspector header button { display: grid; width: 1.8rem; height: 1.8rem; place-items: center; border: 0; border-radius: .45rem; color: #b9bdc5; background: transparent; font-size: 1.3rem; cursor: pointer; }.source-inspector header button:hover { background: #2a2c2f; color: white; }
+.source-inspector-url { overflow: hidden; margin: .9rem 1rem .55rem; color: #8e9198; font-size: .73rem; line-height: 1.35; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }.source-inspector-url:hover { color: #9fc8ff; text-decoration: underline; }
+.source-inspector-open { margin: 0 1rem .85rem; border: 1px solid #3d77b8; border-radius: .5rem; padding: .52rem .7rem; color: #a6ceff; font-size: .78rem; font-weight: 650; text-align: center; text-decoration: none; }.source-inspector-open:hover { background: #1d314a; }
+.source-inspector iframe { width: 100%; min-height: 0; flex: 1; border: 0; background: #fff; }.source-inspector-note { margin: 0; padding: .75rem 1rem; border-top: 1px solid #303236; color: #8e9198; font-size: .7rem; line-height: 1.4; }
+@media (max-width: 900px) { .source-inspector { position: fixed; inset: 0 auto 0 0; width: min(25rem, 88vw); }.chat-workspace .source-inspector + section { filter: brightness(.55); } }
+
+/* Professional sign-in surface. It deliberately avoids the decorative 3D treatment used by the old login screen. */
+.auth-page { min-height: 100dvh; color: #eef0f4; background: #111213; }
+.auth-header { display: flex; align-items: center; justify-content: space-between; max-width: 76rem; margin: 0 auto; padding: 1.6rem 2rem; }
+.auth-brand { display: inline-flex; align-items: center; gap: .65rem; color: #f4f5f7; font-size: 1.05rem; font-weight: 700; letter-spacing: -.025em; text-decoration: none; }.auth-brand img { width: 2rem; height: 2rem; border-radius: .6rem; }.auth-guest-link { color: #a8adb7; font-size: .84rem; text-decoration: none; }.auth-guest-link span { margin-left: .25rem; color: #84b7ff; }.auth-guest-link:hover { color: #eef0f4; }
+.auth-layout { display: grid; max-width: 70rem; min-height: calc(100dvh - 5.2rem); align-items: center; gap: clamp(3rem, 9vw, 10rem); margin: 0 auto; padding: 2rem; grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem); }
+.auth-eyebrow { margin: 0; color: #75a8ed; font-size: .67rem; font-weight: 750; letter-spacing: .16em; }.auth-intro h1 { margin: 1.1rem 0 1.4rem; color: #f5f6f7; font-size: clamp(2.55rem, 5vw, 4.6rem); font-weight: 680; letter-spacing: -.065em; line-height: .99; }.auth-intro h1 em { color: #90b8f4; font-style: normal; }.auth-description { max-width: 29rem; margin: 0; color: #a8adb6; font-size: 1rem; line-height: 1.75; }.auth-benefits { display: grid; gap: .95rem; margin-top: 2.8rem; }.auth-benefits > div { display: grid; grid-template-columns: 2rem 1fr; gap: .7rem; align-items: start; }.auth-benefits b { color: #5784bf; font-size: .72rem; font-weight: 650; }.auth-benefits strong, .auth-benefits small { display: block; }.auth-benefits strong { color: #e7e9ed; font-size: .85rem; font-weight: 650; }.auth-benefits small { margin-top: .22rem; color: #858b95; font-size: .78rem; }
+.auth-card-wrap { padding: 1px; border-radius: 1.25rem; background: linear-gradient(145deg, #3d4149, #1c1d20); }.auth-card { padding: 1.8rem; border-radius: calc(1.25rem - 1px); background: #1a1b1e; }.auth-card-top { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }.auth-card-top p { margin: 0; color: #8c929c; font-size: .62rem; font-weight: 750; letter-spacing: .15em; }.auth-status { color: #9ea4ac; font-size: .7rem; }.auth-status i { display: inline-block; width: .4rem; height: .4rem; margin-right: .34rem; border-radius: 50%; background: #5cbf86; }.auth-card h2 { margin: 1.5rem 0 .5rem; font-size: 1.48rem; letter-spacing: -.04em; }.auth-card-description { margin: 0; color: #9298a1; font-size: .86rem; line-height: 1.55; }.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem; margin-top: 1.5rem; padding: .25rem; border-radius: .65rem; background: #25262a; }.auth-tabs button { border: 0; border-radius: .45rem; padding: .55rem; color: #9298a1; background: transparent; font-size: .78rem; font-weight: 650; cursor: pointer; }.auth-tabs button.active { color: #f1f3f6; background: #383a40; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.auth-form { display: grid; gap: 1rem; margin-top: 1.45rem; }.auth-form label { color: #c3c7ce; font-size: .78rem; font-weight: 650; }.auth-form input { box-sizing: border-box; width: 100%; margin-top: .45rem; border: 1px solid #3b3e44; border-radius: .58rem; padding: .72rem .78rem; color: #f1f3f5; background: #131416; font: inherit; font-size: .85rem; outline: none; }.auth-form input:focus { border-color: #6094d6; box-shadow: 0 0 0 3px rgba(91,143,210,.13); }.auth-password { position: relative; }.auth-password input { padding-right: 3.6rem; }.auth-password button { position: absolute; inset: auto .2rem .2rem auto; border: 0; border-radius: .42rem; padding: .38rem .5rem; color: #9fc6ff; background: transparent; font-size: .72rem; cursor: pointer; }.auth-password button:hover { background: #282c33; }.auth-message { margin: 0; border: 1px solid #875c43; border-radius: .58rem; padding: .65rem .75rem; color: #edc2a7; background: #30231e; font-size: .78rem; }.auth-submit { display: flex; align-items: center; justify-content: space-between; margin-top: .25rem; border: 0; border-radius: .58rem; padding: .78rem .9rem; color: #06101e; background: #91bcf7; font-size: .84rem; font-weight: 750; cursor: pointer; }.auth-submit:hover { background: #aed0ff; }.auth-submit:disabled { cursor: not-allowed; opacity: .65; }.auth-submit span { font-size: 1.1rem; }.auth-footnote { margin: 1.25rem 0 0; color: #717782; font-size: .68rem; line-height: 1.5; text-align: center; }
+@media (max-width: 760px) { .auth-header { padding: 1.25rem; }.auth-layout { display: block; min-height: auto; padding: 3rem 1.25rem; }.auth-intro { max-width: 30rem; margin: 0 auto 2.75rem; }.auth-intro h1 { font-size: 2.75rem; }.auth-card-wrap { max-width: 28rem; margin: auto; } }.auth-form input::placeholder { color: #626872; }
+@media (min-width: 768px) { .chat-workspace:has(.chat-empty) form { bottom: auto; top: calc(min(25vh, 15rem) + 9rem); } .chat-workspace:has(.chat-empty) form > div { max-width: 48.5rem; } }
+@media (max-width: 640px) { .chat-workspace .chat-sidebar { position: absolute; z-index: 20; height: 100%; box-shadow: 16px 0 35px rgba(0,0,0,.35); } .chat-workspace .chat-empty { padding-top: 6rem; } .chat-workspace .chat-modes button { padding: .58rem .8rem; } }
+
 /* Daily volume chart: explicit sizing and paint avoid production utility-class omissions. */
 .daily-volume-chart { margin-top: 1.5rem; }.daily-volume-bars { display: flex; height: 13rem; align-items: flex-end; gap: .35rem; padding: .75rem .25rem 0; border-bottom: 1px solid rgba(100, 116, 139, .35); background: repeating-linear-gradient(to bottom, transparent 0, transparent 32%, rgba(100,116,139,.12) 32.5%, transparent 33%); }.daily-volume-column { display: flex; height: 100%; min-width: 5px; flex: 1 1 0; align-items: flex-end; }.daily-volume-bar { display: block; width: 100%; min-height: 0; border: 1px solid rgba(125, 211, 252, .35); border-bottom: 0; border-radius: .4rem .4rem 0 0; background: linear-gradient(180deg, #38bdf8 0%, #0e7490 100%); box-shadow: 0 -4px 14px rgba(14, 116, 144, .18), inset 0 1px rgba(255,255,255,.22); transition: filter .16s ease, transform .16s ease; }.daily-volume-column:hover .daily-volume-bar { filter: brightness(1.18); transform: translateY(-2px); }.daily-volume-meta { display: flex; justify-content: space-between; gap: .75rem; margin-top: .7rem; color: #7f9abe; font-size: .72rem; }.daily-volume-meta span:nth-child(2) { color: #9fb5d0; font-weight: 600; }
 

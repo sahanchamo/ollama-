@@ -362,7 +362,7 @@ async def send_message(
     if system_context:
         messages.insert(0, ChatMessage(role="system", content=system_context))
     ollama_request = ChatRequest(
-        model=conversation.model, messages=messages, temperature=payload.temperature, stream=True
+        model=conversation.model, messages=messages, temperature=payload.temperature, think=payload.think, stream=True
     )
     return StreamingResponse(
         persist_stream(request, ollama_request, conversation.id, user.id),
